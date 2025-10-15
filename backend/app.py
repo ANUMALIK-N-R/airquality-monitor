@@ -33,13 +33,20 @@ TWILIO_PHONE_NUMBER = "+13856005348"
 # ==========================
 # LOAD PREDICTION MODEL
 # ==========================
-MODEL_DIR = "models"
+import os
+from keras.models import load_model
+
+MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "models"))
 model_files = [f for f in os.listdir(MODEL_DIR) if f.endswith(".h5")]
 
-if len(model_files) == 0:
+if not model_files:
     raise FileNotFoundError("No .h5 model found in 'models/' folder!")
+
 MODEL_PATH = os.path.join(MODEL_DIR, model_files[0])
-model = load_model(MODEL_PATH)
+
+# Load model safely without recompiling
+model = load_model(MODEL_PATH, compile=False)
+print(f"✅ Model loaded successfully from: {MODEL_PATH}")
 
 # ==========================
 # HELPER FUNCTIONS
