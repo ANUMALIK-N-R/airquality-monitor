@@ -207,6 +207,25 @@ st.markdown("""
     div[data-testid="stDataFrame"] {
         border: 2px solid #BBDEFB;
         border-radius: 10px;
+        background-color: white;
+    }
+    
+    /* Chart containers */
+    div[data-testid="stPlotlyChart"] {
+        background-color: white;
+        border-radius: 10px;
+        padding: 0.5rem;
+    }
+    
+    /* Ensure all containers have white background */
+    .element-container {
+        background-color: transparent;
+    }
+    
+    /* Block container styling */
+    .block-container {
+        background-color: transparent;
+        padding-top: 2rem;
     }
 
 </style>
