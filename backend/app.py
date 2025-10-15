@@ -782,8 +782,8 @@ else:
             render_alert_subscription_tab(aqi_data)
             st.markdown('</div>', unsafe_allow_html=True)
     with tab5:
-    with st.container():
-        st.markdown('<div class="content-card">', unsafe_allow_html=True)
-        render_dummy_forecast_tab()
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.container():
+            st.markdown('<div class="content-card">', unsafe_allow_html=True)
+            render_dummy_forecast_tab()
+            st.markdown('</div>', unsafe_allow_html=True)
 
