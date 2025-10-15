@@ -649,6 +649,59 @@ def render_alert_subscription_tab(df):
                     else:
                         st.error(message, icon="❌")
                         st.info("💡 **Note:** To enable SMS alerts, you need to:\n1. Sign up for Twilio (free trial available)\n2. Get your Account SID, Auth Token, and Phone Number\n3. Update the configuration in the code\n4. Install Twilio: `pip install twilio`", icon="ℹ️")
+def render_dummy_forecast_tab():
+    """Render a dummy 24-hour AQI forecast using simulated data."""
+    st.markdown('<div class="section-header">📈 24-Hour AQI Forecast (Sample)</div>', unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="background-color: #E3F2FD; padding: 1rem; border-radius: 10px; border-left: 4px solid #2196F3; margin-bottom: 1rem;">
+        <p style="color: #0D47A1; margin: 0; font-weight: 500;">
+        This sample forecast simulates how the Air Quality Index (AQI) may change over the next 24 hours.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Simulate a smooth AQI forecast for 24 hours
+    hours = np.arange(0, 24)
+    base_aqi = 120 + 40 * np.sin(hours / 3) + np.random.normal(0, 5, size=24)
+    timestamps = [datetime.now() + timedelta(hours=i) for i in range(24)]
+    forecast_df = pd.DataFrame({
+        "timestamp": timestamps,
+        "forecast_aqi": np.clip(base_aqi, 40, 300)
+    })
+
+    # Plot forecast trend
+    fig = px.line(
+        forecast_df,
+        x="timestamp",
+        y="forecast_aqi",
+        title="Predicted AQI Trend for Next 24 Hours (Simulated)",
+        markers=True,
+        line_shape="spline"
+    )
+
+    fig.update_layout(
+        xaxis_title="Time",
+        yaxis_title="Predicted AQI",
+        paper_bgcolor='#F5F5F5',
+        plot_bgcolor='#F5F5F5',
+        xaxis=dict(gridcolor='#DDDDDD'),
+        yaxis=dict(gridcolor='#DDDDDD')
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Display summary
+    avg_aqi = forecast_df["forecast_aqi"].mean()
+    max_aqi = forecast_df["forecast_aqi"].max()
+    min_aqi = forecast_df["forecast_aqi"].min()
+
+    st.markdown(f"""
+    <div style="background-color: white; padding: 1rem; border-radius: 10px; border-left: 5px solid #1976D2; margin-top: 1rem;">
+        <b>Average Forecasted AQI:</b> {avg_aqi:.1f}  
+        <br><b>Expected Range:</b> {min_aqi:.1f} – {max_aqi:.1f}
+        <br><b>Air Quality Outlook:</b> Moderate to Unhealthy range over the next day.
+    </div>
+    """, unsafe_allow_html=True)
 
 def render_analytics_tab(df):
     """Renders charts and data analytics."""
@@ -707,7 +760,7 @@ render_header(aqi_data)
 if aqi_data.empty:
     st.error("⚠️ **Could not fetch live AQI data.** The API may be down or there's a network issue. Please try again later.", icon="🚨")
 else:
-    tab1, tab2, tab3, tab4 = st.tabs(["🗺️ Live Map", "🔔 Alerts & Health", "📊 Analytics", "📱 SMS Alerts"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🗺️ Live Map", "🔔 Alerts & Health", "📊 Analytics", "📱 SMS Alerts", "📈 Forecast"])
     with tab1:
         with st.container():
              st.markdown('<div class="content-card">', unsafe_allow_html=True)
@@ -728,3 +781,9 @@ else:
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
             render_alert_subscription_tab(aqi_data)
             st.markdown('</div>', unsafe_allow_html=True)
+    with tab5:
+    with st.container():
+        st.markdown('<div class="content-card">', unsafe_allow_html=True)
+        render_dummy_forecast_tab()
+        st.markdown('</div>', unsafe_allow_html=True)
+
