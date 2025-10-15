@@ -1,3 +1,13 @@
+import streamlit as st
+import pandas as pd
+import requests
+import pydeck as pdk
+import plotly.express as px
+from datetime import datetime
+from tensorflow.keras.models import load_model
+import numpy as np
+
+
 # ==========================
 # CUSTOM CSS FOR STYLING
 # ==========================
@@ -200,15 +210,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
-import streamlit as st
-import pandas as pd
-import requests
-import pydeck as pdk
-import plotly.express as px
-from datetime import datetime
-from tensorflow.keras.models import load_model
-import numpy as np
 
 # ==========================
 # PAGE CONFIGURATION
