@@ -49,38 +49,52 @@ st.markdown("""
     
     /* Navigation Tabs */
     .stRadio > div {
-        background: transparent;
-        padding: 0;
-        border-radius: 0;
-        box-shadow: none;
+        background: rgba(255, 255, 255, 0.5);
+        padding: 1.5rem;
+        border-radius: 20px;
+        box-shadow: 0 4px 20px rgba(33, 150, 243, 0.15);
         margin-bottom: 2.5rem;
-        border: none;
+        border: 1px solid rgba(187, 222, 251, 0.5);
+        backdrop-filter: blur(10px);
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
     }
     
     .stRadio > div > label {
-        display: flex;
-        gap: 1.5rem;
-        justify-content: center;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        width: 100%;
     }
     
     .stRadio > div > label > div {
         background: white !important;
         color: #1565C0 !important;
-        padding: 1rem 2.5rem !important;
-        border-radius: 50px !important;
+        padding: 1rem 1.5rem !important;
+        border-radius: 15px !important;
         transition: all 0.3s ease;
         cursor: pointer;
         font-weight: 600;
-        font-size: 1.1rem;
-        box-shadow: 0 4px 15px rgba(33, 150, 243, 0.2);
+        font-size: 1rem;
+        box-shadow: 0 2px 10px rgba(33, 150, 243, 0.15);
         border: 2px solid #BBDEFB !important;
+        text-align: center;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        min-height: 50px;
     }
     
     .stRadio > div > label > div:hover {
         background: #E3F2FD !important;
-        transform: translateY(-3px);
-        box-shadow: 0 6px 20px rgba(33, 150, 243, 0.3);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(33, 150, 243, 0.25);
+        border-color: #2196F3 !important;
+    }
+    
+    .stRadio > div > label > div[data-baseweb="radio"] > div:first-child {
+        display: none !important;
     }
     
     /* Content Cards */
