@@ -2,21 +2,9 @@ import streamlit as st
 import pandas as pd
 import requests
 import pydeck as pdk
-import plotly.express as px
-from datetime import datetime
 
 # ==========================
-# PAGE CONFIGURATION
-# ==========================
-# Must be the first Streamlit command
-st.set_page_config(
-    layout="wide",
-    page_title="Delhi Air Quality Dashboard",
-    page_icon="💨"
-)
-
-# ==========================
-# STATIC CONFIG
+# CONFIGURATION
 # ==========================
 API_TOKEN = "97a0e712f47007556b57ab4b14843e72b416c0f9"
 DELHI_BOUNDS = "28.404,76.840,28.883,77.349"
@@ -24,306 +12,536 @@ DELHI_LAT = 28.6139
 DELHI_LON = 77.2090
 
 # ==========================
-# CUSTOM CSS FOR STYLING
+# CUSTOM CSS
 # ==========================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
-    html, body, [class*="st-"] {
-        font-family: 'Inter', sans-serif;
-    }
-
-    /* Main background */
+    /* Global Styles */
     .stApp {
-        background-color: #F0F4F8;
-    }
-
-    /* Hide Streamlit's default header and footer */
-    header, footer {
-        visibility: hidden;
+        background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 50%, #90CAF9 100%);
     }
     
-    /* Main title styling */
-    .main-title {
-        font-size: 2.8rem;
-        font-weight: 700;
-        color: #1E293B;
-        padding: 1rem 0 0 0;
+    /* Main Container */
+    .main {
+        padding: 2rem;
     }
-
-    /* Subtitle styling */
-    .subtitle {
-        font-size: 1.1rem;
-        color: #475569;
-        padding-bottom: 2rem;
-    }
-
-    /* Metric cards styling */
-    .metric-card {
-        background-color: #FFFFFF;
-        border-radius: 12px;
-        padding: 1.5rem;
-        border: 1px solid #E2E8F0;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    
+    /* Header */
+    .header-container {
+        background: transparent;
+        padding: 1.5rem 0;
+        margin-bottom: 2rem;
         text-align: center;
     }
-    .metric-card-label {
-        font-size: 1rem;
+    
+    .main-title {
+        font-size: 3.5rem;
+        font-weight: 900;
+        color: #0D47A1;
+        margin-bottom: 0.5rem;
+        text-shadow: 2px 2px 4px rgba(13, 71, 161, 0.2);
+        letter-spacing: -1px;
+    }
+    
+    .subtitle {
+        color: #1565C0;
+        font-size: 1.2rem;
         font-weight: 500;
-        color: #64748B;
     }
-    .metric-card-value {
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: #0F172A;
-    }
-    .metric-card-delta {
-        font-size: 0.9rem;
-        color: #64748B;
-    }
-
-    /* Weather widget styling */
-    .weather-widget {
-        background-color: #FFFFFF;
-        border-radius: 12px;
+    
+    /* Navigation Tabs */
+    .stRadio > div {
+        background: rgba(255, 255, 255, 0.5);
         padding: 1.5rem;
-        border: 1px solid #E2E8F0;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        border-radius: 20px;
+        box-shadow: 0 4px 20px rgba(33, 150, 243, 0.15);
+        margin-bottom: 2.5rem;
+        border: 1px solid rgba(187, 222, 251, 0.5);
+        backdrop-filter: blur(10px);
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
     }
-    .weather-temp {
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: #1E293B;
+    
+    .stRadio > div > label {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        width: 100%;
     }
-
-    /* Styling for Streamlit tabs */
-    button[data-baseweb="tab"] {
-        font-size: 1rem;
+    
+    .stRadio > div > label > div {
+        background: white !important;
+        color: #1565C0 !important;
+        padding: 1rem 1.5rem !important;
+        border-radius: 15px !important;
+        transition: all 0.3s ease;
+        cursor: pointer;
         font-weight: 600;
-        background-color: transparent;
-        border-radius: 8px;
-        margin: 0 5px;
-        transition: background-color 0.3s ease;
+        font-size: 1rem;
+        box-shadow: 0 2px 10px rgba(33, 150, 243, 0.15);
+        border: 2px solid #BBDEFB !important;
+        text-align: center;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        min-height: 50px;
     }
-    button[data-baseweb="tab"][aria-selected="true"] {
-        background-color: #FFFFFF;
-        color: #2563EB;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    
+    .stRadio > div > label > div:hover {
+        background: #E3F2FD !important;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(33, 150, 243, 0.25);
+        border-color: #2196F3 !important;
     }
-
-    /* General card for content */
-    .content-card {
-        background-color: #FFFFFF;
-        padding: 2rem;
-        border-radius: 12px;
-        border: 1px solid #E2E8F0;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-        margin-top: 1.5rem;
+    
+    .stRadio > div > label > div[data-baseweb="radio"] > div:first-child {
+        display: none !important;
     }
-
-    /* Alert cards for different severity levels */
-    .alert-card {
-        padding: 1rem 1.5rem;
-        border-radius: 8px;
+    
+    /* Weather Widget */
+    .weather-widget {
+        background: rgba(255, 255, 255, 0.5);
+        padding: 1.5rem;
+        border-radius: 20px;
+        box-shadow: 0 4px 20px rgba(33, 150, 243, 0.15);
+        border: 1px solid rgba(187, 222, 251, 0.5);
+        backdrop-filter: blur(10px);
+        text-align: center;
+    }
+    
+    .weather-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #1565C0;
         margin-bottom: 1rem;
+    }
+    
+    .weather-temp {
+        font-size: 3rem;
+        font-weight: 800;
+        color: #0D47A1;
+        margin: 0.5rem 0;
+    }
+    
+    .weather-desc {
+        font-size: 1.1rem;
+        color: #1976D2;
+        font-weight: 500;
+        margin-bottom: 1rem;
+        text-transform: capitalize;
+    }
+    
+    .weather-details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .weather-detail-item {
+        background: white;
+        padding: 0.75rem;
+        border-radius: 10px;
+        border: 1px solid #BBDEFB;
+    }
+    
+    .weather-detail-label {
+        font-size: 0.85rem;
+        color: #1565C0;
+        font-weight: 600;
+    }
+    
+    .weather-detail-value {
+        font-size: 1.1rem;
+        color: #0D47A1;
+        font-weight: 700;
+        margin-top: 0.25rem;
+    }
+    
+    /* Navigation and Weather Container */
+    .nav-weather-container {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 1.5rem;
+        margin-bottom: 2.5rem;
+        align-items: start;
+    }
+    
+    @media (max-width: 768px) {
+        .nav-weather-container {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    /* Content Cards */
+    .content-card {
+        background: white;
+        padding: 2rem;
+        border-radius: 20px;
+        box-shadow: 0 10px 40px rgba(33, 150, 243, 0.2);
+        margin-bottom: 1.5rem;
+        border: 2px solid #BBDEFB;
+    }
+    
+    .section-title {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #1565C0;
+        margin-bottom: 1.5rem;
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        gap: 0.5rem;
     }
-    .alert-hazardous { background-color: #FEE2E2; border-left: 5px solid #DC2626; }
-    .alert-very-unhealthy { background-color: #FEF3C7; border-left: 5px solid #F59E0B; }
-    .alert-unhealthy { background-color: #FFEDD5; border-left: 5px solid #F97316; }
-
+    
+    /* Map Container */
+    .map-container {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 20px;
+        box-shadow: 0 10px 40px rgba(33, 150, 243, 0.2);
+        border: 2px solid #BBDEFB;
+    }
+    
+    /* Alert Cards */
+    .alert-card {
+        background: linear-gradient(135deg, #EF5350 0%, #E53935 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        margin-bottom: 1rem;
+        box-shadow: 0 5px 20px rgba(239, 83, 80, 0.3);
+    }
+    
+    .alert-card-warning {
+        background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+    }
+    
+    .alert-card-caution {
+        background: linear-gradient(135deg, #FFA726 0%, #FB8C00 100%);
+    }
+    
+    .alert-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: white;
+    }
+    
+    .alert-item {
+        background: rgba(255,255,255,0.25);
+        padding: 0.75rem;
+        border-radius: 10px;
+        margin-bottom: 0.5rem;
+        backdrop-filter: blur(10px);
+        color: white;
+    }
+    
+    /* Metrics */
+    .metric-container {
+        background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 20px;
+        text-align: center;
+        margin-bottom: 2rem;
+        box-shadow: 0 10px 40px rgba(33, 150, 243, 0.3);
+    }
+    
+    .metric-label {
+        font-size: 1rem;
+        opacity: 0.95;
+        margin-bottom: 0.5rem;
+        color: white;
+    }
+    
+    .metric-value {
+        font-size: 3rem;
+        font-weight: 800;
+        color: white;
+    }
+    
+    /* Charts */
+    div[data-testid="stMetric"] {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        box-shadow: 0 5px 20px rgba(33, 150, 243, 0.15);
+        border: 2px solid #E3F2FD;
+    }
+    
+    div[data-testid="stMetric"] label {
+        color: #1565C0 !important;
+        font-weight: 600;
+    }
+    
+    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+        color: #1976D2 !important;
+    }
+    
+    /* Markdown Headers in Cards */
+    .content-card h3 {
+        color: #1565C0;
+        font-weight: 700;
+    }
+    
+    /* Warning Messages */
+    .stWarning {
+        background: white;
+        border-left: 5px solid #FF9800;
+        border-radius: 10px;
+        padding: 1.5rem;
+        color: #E65100;
+    }
+    
+    .stSuccess {
+        background: white;
+        border-left: 5px solid #4CAF50;
+        border-radius: 10px;
+        padding: 1.5rem;
+        color: #2E7D32;
+    }
+    
+    /* Hide Streamlit Branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================
 # HELPER FUNCTIONS
 # ==========================
-@st.cache_data(ttl=600, show_spinner="Fetching Air Quality Data...")
-def fetch_live_data():
-    """Fetches and processes live AQI data from the WAQI API."""
-    url = f"https://api.waqi.info/map/bounds/?latlng={DELHI_BOUNDS}&token={API_TOKEN}"
+def get_aqi_category(aqi):
+    if aqi <= 50:
+        return "Good", [0, 228, 0]
+    elif aqi <= 100:
+        return "Moderate", [255, 255, 0]
+    elif aqi <= 150:
+        return "Unhealthy for Sensitive", [255, 126, 0]
+    elif aqi <= 200:
+        return "Unhealthy", [255, 0, 0]
+    elif aqi <= 300:
+        return "Very Unhealthy", [143, 63, 151]
+    else:
+        return "Hazardous", [126, 0, 35]
+
+@st.cache_data(ttl=600)
+def fetch_weather_data():
+    # Using Open-Meteo API (completely free, no API key needed)
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": DELHI_LAT,
+        "longitude": DELHI_LON,
+        "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code",
+        "timezone": "Asia/Kolkata"
+    }
     try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return None
+    except:
+        return None
+
+def get_weather_description(code):
+    """Convert WMO weather code to description"""
+    weather_codes = {
+        0: "Clear sky",
+        1: "Mainly clear",
+        2: "Partly cloudy",
+        3: "Overcast",
+        45: "Foggy",
+        48: "Foggy",
+        51: "Light drizzle",
+        53: "Moderate drizzle",
+        55: "Dense drizzle",
+        61: "Slight rain",
+        63: "Moderate rain",
+        65: "Heavy rain",
+        71: "Slight snow",
+        73: "Moderate snow",
+        75: "Heavy snow",
+        77: "Snow grains",
+        80: "Slight rain showers",
+        81: "Moderate rain showers",
+        82: "Violent rain showers",
+        85: "Slight snow showers",
+        86: "Heavy snow showers",
+        95: "Thunderstorm",
+        96: "Thunderstorm with hail",
+        99: "Thunderstorm with hail"
+    }
+    return weather_codes.get(code, "Unknown")
+
+# ==========================
+# FETCH LIVE DATA
+# ==========================
+@st.cache_data(ttl=600)
+def fetch_live_data():
+    url = "https://api.waqi.info/map/bounds/"
+    params = {"latlng": DELHI_BOUNDS, "token": API_TOKEN}
+    try:
+        response = requests.get(url, params=params, timeout=10)
         data = response.json()
         if data.get("status") == "ok":
             df = pd.DataFrame(data["data"])
             df = df[df['aqi'] != "-"]
-            df['aqi'] = pd.to_numeric(df['aqi'])
+            df['aqi'] = df['aqi'].astype(float)
             df['station_name'] = df['station'].apply(lambda x: x.get('name', 'N/A'))
-            df['last_updated'] = df['station'].apply(lambda x: x.get('time', {}).get('s', 'N/A'))
-            df[['category', 'color', 'emoji', 'advice']] = df['aqi'].apply(get_aqi_category).apply(pd.Series)
-            df['lat'] = pd.to_numeric(df['lat'])
-            df['lon'] = pd.to_numeric(df['lon'])
+            df['last_updated'] = df['station'].apply(lambda x: x.get('time', 'N/A'))
+            df['category'], df['color'] = zip(*df['aqi'].map(get_aqi_category))
+            df['lat'] = df['lat'].astype(float)
+            df['lon'] = df['lon'].astype(float)
             return df
+        else:
+            return pd.DataFrame()
+    except:
         return pd.DataFrame()
-    except requests.RequestException:
-        return pd.DataFrame()
-
-@st.cache_data(ttl=1800, show_spinner="Fetching Weather Data...")
-def fetch_weather_data():
-    """Fetches current weather data from Open-Meteo API."""
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={DELHI_LAT}&longitude={DELHI_LON}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=Asia/Kolkata"
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException:
-        return None
-
-def get_aqi_category(aqi):
-    """Categorizes AQI value and provides color, emoji, and health advice."""
-    if aqi <= 50: return "Good", [0, 158, 96], "✅", "Enjoy outdoor activities."
-    elif aqi <= 100: return "Moderate", [255, 214, 0], "🤔", "Unusually sensitive people should consider reducing prolonged or heavy exertion."
-    elif aqi <= 150: return "Unhealthy for Sensitive Groups", [249, 115, 22], "😷", "Sensitive groups should reduce prolonged or heavy exertion."
-    elif aqi <= 200: return "Unhealthy", [220, 38, 38], "🔴", "Everyone may begin to experience health effects."
-    elif aqi <= 300: return "Very Unhealthy", [147, 51, 234], " pathogenic", "Health alert: everyone may experience more serious health effects."
-    else: return "Hazardous", [126, 34, 206], "☠️", "Health warnings of emergency conditions. The entire population is more likely to be affected."
-
-def get_weather_info(code):
-    """Converts WMO weather code to a description and icon."""
-    codes = {0: ("Clear sky", "☀️"), 1: ("Mainly clear", "🌤️"), 2: ("Partly cloudy", "⛅"), 3: ("Overcast", "☁️"), 45: ("Fog", "🌫️"), 48: ("Depositing rime fog", "🌫️"), 51: ("Light drizzle", "💧"), 53: ("Moderate drizzle", "💧"), 55: ("Dense drizzle", "💧"), 61: ("Slight rain", "🌧️"), 63: ("Moderate rain", "🌧️"), 65: ("Heavy rain", "🌧️"), 80: ("Slight rain showers", "🌦️"), 81: ("Moderate rain showers", "🌦️"), 82: ("Violent rain showers", "⛈️"), 95: ("Thunderstorm", "⚡"), 96: ("Thunderstorm, slight hail", "⛈️"), 99: ("Thunderstorm, heavy hail", "⛈️")}
-    return codes.get(code, ("Unknown", "❓"))
 
 # ==========================
-# UI RENDERING FUNCTIONS
+# STREAMLIT UI
 # ==========================
-def render_header(df):
-    """Renders the main header with summary metrics and weather."""
-    st.markdown('<div class="main-title">Delhi Air Quality Dashboard</div>', unsafe_allow_html=True)
-    last_update_time = df['last_updated'].max() if not df.empty and 'last_updated' in df.columns else "N/A"
-    st.markdown(f'<p class="subtitle">Last updated: {last_update_time}</p>', unsafe_allow_html=True)
+st.set_page_config(layout="wide", page_title="Delhi NCR Air Quality", page_icon="🌍")
 
-    c1, c2, c3, c4 = st.columns(4)
-    if not df.empty:
-        with c1:
-            st.markdown(f'<div class="metric-card"><div class="metric-card-label">Avg. AQI</div><div class="metric-card-value">{df["aqi"].mean():.1f}</div><div class="metric-card-delta">{get_aqi_category(df["aqi"].mean())[0]}</div></div>', unsafe_allow_html=True)
-        with c2:
-            st.markdown(f'<div class="metric-card"><div class="metric-card-label">Min AQI</div><div class="metric-card-value">{df["aqi"].min():.0f}</div><div class="metric-card-delta">{df.loc[df["aqi"].idxmin()]["station_name"]}</div></div>', unsafe_allow_html=True)
-        with c3:
-            st.markdown(f'<div class="metric-card"><div class="metric-card-label">Max AQI</div><div class="metric-card-value">{df["aqi"].max():.0f}</div><div class="metric-card-delta">{df.loc[df["aqi"].idxmax()]["station_name"]}</div></div>', unsafe_allow_html=True)
+# Header
+st.markdown("""
+<div class="header-container">
+    <div class="main-title">🌍 Delhi NCR Air Quality Monitor</div>
+    <div class="subtitle">Real-time Air Quality Index tracking across Delhi NCR region</div>
+</div>
+""", unsafe_allow_html=True)
 
-    with c4:
-        weather_data = fetch_weather_data()
-        if weather_data and 'current' in weather_data:
-            current = weather_data['current']
-            desc, icon = get_weather_info(current.get('weather_code', 0))
-            st.markdown(f"""
-            <div class="weather-widget">
-                <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div>
-                        <div class="metric-card-label">Current Weather</div>
-                        <div class="weather-temp">{current['temperature_2m']:.1f}°C</div>
-                    </div>
-                    <div style="font-size: 3rem;">{icon}</div>
+# Navigation and Weather in Grid
+col_nav, col_weather = st.columns([2, 1])
+
+with col_nav:
+    # Navigation
+    tab = st.radio("", ["🗺️ Live Map", "🔔 Alerts", "📊 Analytics"], horizontal=True, label_visibility="collapsed")
+
+with col_weather:
+    # Weather Widget
+    weather_data = fetch_weather_data()
+    if weather_data and 'current' in weather_data:
+        current = weather_data['current']
+        temp = current['temperature_2m']
+        humidity = current['relative_humidity_2m']
+        wind_speed = current['wind_speed_10m']
+        weather_code = current.get('weather_code', 0)
+        description = get_weather_description(weather_code)
+        
+        st.markdown(f"""
+        <div class="weather-widget">
+            <div class="weather-title">🌤️ Delhi Weather</div>
+            <div class="weather-temp">{temp:.1f}°C</div>
+            <div class="weather-desc">{description}</div>
+            <div class="weather-details">
+                <div class="weather-detail-item">
+                    <div class="weather-detail-label">Humidity</div>
+                    <div class="weather-detail-value">{humidity}%</div>
                 </div>
-                <div style="text-align: left; font-size: 0.9rem; color: #64748B; margin-top: 1rem;">
-                    {desc} · Humidity: {current['relative_humidity_2m']}% · Wind: {current['wind_speed_10m']} km/h
+                <div class="weather-detail-item">
+                    <div class="weather-detail-label">Wind Speed</div>
+                    <div class="weather-detail-value">{wind_speed} km/h</div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="weather-widget">
+            <div class="weather-title">🌤️ Delhi Weather</div>
+            <div class="weather-desc" style="margin-top: 1rem;">Weather data unavailable</div>
+            <div style="font-size: 0.9rem; color: #1976D2; margin-top: 0.5rem;">Please check your connection</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-def render_map_tab(df):
-    """Renders the interactive map of AQI stations."""
-    st.markdown("##### 📍 Interactive Air Quality Map")
-    st.pydeck_chart(pdk.Deck(
-        map_style="mapbox://styles/mapbox/light-v10",
-        initial_view_state=pdk.ViewState(latitude=DELHI_LAT, longitude=DELHI_LON, zoom=9.5, pitch=50),
-        layers=[pdk.Layer(
+# Fetch Data
+df = fetch_live_data()
+
+if df.empty:
+    st.warning("⚠️ Could not fetch live AQI data. Please check your connection and try again.")
+else:
+    if tab == "🗺️ Live Map":
+        st.markdown('<div class="map-container">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">🗺️ Interactive Air Quality Map</div>', unsafe_allow_html=True)
+
+        # Pydeck ScatterplotLayer for pins
+        layer = pdk.Layer(
             "ScatterplotLayer",
             data=df,
             get_position='[lon, lat]',
             get_fill_color='color',
-            get_radius=250,
+            get_radius=300,
             pickable=True,
-            opacity=0.8,
-            stroked=True,
-            get_line_color=[0, 0, 0, 100],
-            line_width_min_pixels=1,
-        )],
-        tooltip={"html": "<b>{station_name}</b><br/>AQI: {aqi}<br/>Category: {category}<br/>Last Updated: {last_updated}"}
-    ))
-
-def render_alerts_tab(df):
-    """Renders health alerts and advice based on current AQI levels."""
-    st.markdown("##### 🔔 Health Alerts & Recommendations")
-    st.info(f"**Current Situation:** Based on the highest AQI of **{df['aqi'].max():.0f}**, the recommended action is: **{get_aqi_category(df['aqi'].max())[3]}**", icon="ℹ️")
-
-    alerts = {
-        "Hazardous": (df[df['aqi'] > 300], "alert-hazardous"),
-        "Very Unhealthy": (df[(df['aqi'] > 200) & (df['aqi'] <= 300)], "alert-very-unhealthy"),
-        "Unhealthy": (df[(df['aqi'] > 150) & (df['aqi'] <= 200)], "alert-unhealthy")
-    }
-    has_alerts = False
-    for level, (subset, card_class) in alerts.items():
-        if not subset.empty:
-            has_alerts = True
-            st.markdown(f"**{subset.iloc[0]['emoji']} {level} Conditions Detected**")
-            for _, row in subset.sort_values('aqi', ascending=False).iterrows():
-                st.markdown(f'<div class="alert-card {card_class}"><span style="font-weight: 600;">{row["station_name"]}</span> <span style="font-weight: 700; font-size: 1.2rem;">{row["aqi"]:.0f}</span></div>', unsafe_allow_html=True)
-
-    if not has_alerts:
-        st.success("✅ No significant air quality alerts at the moment. AQI levels are currently within the good to moderate range for most areas.", icon="✅")
-
-def render_analytics_tab(df):
-    """Renders charts and data analytics."""
-    st.markdown("##### 📊 Data Analytics")
-    c1, c2 = st.columns([1, 1])
-
-    with c1:
-        st.markdown("**AQI Category Distribution**")
-        category_counts = df['category'].value_counts()
-        fig = px.pie(
-            values=category_counts.values, names=category_counts.index, hole=0.4,
-            color=category_counts.index,
-            color_discrete_map={
-                "Good": "#009E60", "Moderate": "#FFD600", "Unhealthy for Sensitive Groups": "#F97316",
-                "Unhealthy": "#DC2626", "Very Unhealthy": "#9333EA", "Hazardous": "#7E22CE"
-            }
         )
-        fig.update_traces(textinfo='percent+label', pull=[0.05]*len(category_counts.index))
-        fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0))
-        st.plotly_chart(fig, use_container_width=True)
 
-    with c2:
-        st.markdown("**Top 10 Most Polluted Stations**")
-        top_10 = df.nlargest(10, 'aqi').sort_values('aqi', ascending=True)
-        fig = px.bar(
-            top_10, x='aqi', y='station_name', orientation='h',
-            color='aqi', color_continuous_scale=px.colors.sequential.Reds
-        )
-        fig.update_layout(xaxis_title="AQI", yaxis_title="", showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+        tooltip = {
+            "html": "<b>{station_name}</b><br/>AQI: {aqi}<br/>Category: {category}<br/>Last Updated: {last_updated}",
+            "style": {"color": "white"}
+        }
 
-    st.markdown("**Full Station Data**")
-    st.dataframe(df[['station_name', 'aqi', 'category', 'last_updated']].set_index('station_name'))
+        st.pydeck_chart(pdk.Deck(
+            map_style="light",
+            initial_view_state=pdk.ViewState(
+                latitude=28.6139,
+                longitude=77.2090,
+                zoom=10,
+                pitch=0,
+            ),
+            layers=[layer],
+            tooltip=tooltip
+        ))
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# ==========================
-# MAIN APP EXECUTION
-# ==========================
-aqi_data = fetch_live_data()
-render_header(aqi_data)
+    elif tab == "🔔 Alerts":
+        st.markdown('<div class="content-card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">🔔 Active Air Quality Alerts</div>', unsafe_allow_html=True)
+        
+        hazardous = df[df['aqi'] > 300]
+        very_unhealthy = df[(df['aqi'] > 200) & (df['aqi'] <= 300)]
+        unhealthy = df[(df['aqi'] > 150) & (df['aqi'] <= 200)]
 
-if aqi_data.empty:
-    st.error("⚠️ **Could not fetch live AQI data.** The API may be down or there's a network issue. Please try again later.", icon="🚨")
-else:
-    tab1, tab2, tab3 = st.tabs(["🗺️ Live Map", "🔔 Alerts & Health", "📊 Analytics"])
-    with tab1:
-        with st.container():
-             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-             render_map_tab(aqi_data)
-             st.markdown('</div>', unsafe_allow_html=True)
-    with tab2:
-        with st.container():
-            st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            render_alerts_tab(aqi_data)
-            st.markdown('</div>', unsafe_allow_html=True)
-    with tab3:
-        with st.container():
-            st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            render_analytics_tab(aqi_data)
-            st.markdown('</div>', unsafe_allow_html=True)
+        def show_alerts(title, subset, card_class):
+            if not subset.empty:
+                st.markdown(f'<div class="alert-card {card_class}">', unsafe_allow_html=True)
+                st.markdown(f'<div class="alert-title">{title}</div>', unsafe_allow_html=True)
+                for _, row in subset.iterrows():
+                    st.markdown(f'<div class="alert-item"><b>{row["station_name"]}</b>: AQI {row["aqi"]:.0f}</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
+        show_alerts("🚨 Hazardous Conditions (AQI > 300)", hazardous, "")
+        show_alerts("⚠️ Very Unhealthy (AQI 201-300)", very_unhealthy, "alert-card-warning")
+        show_alerts("⚡ Unhealthy (AQI 151-200)", unhealthy, "alert-card-caution")
+
+        if hazardous.empty and very_unhealthy.empty and unhealthy.empty:
+            st.success("✅ No active alerts. Air quality is within acceptable levels.")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    elif tab == "📊 Analytics":
+        st.markdown('<div class="content-card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">📊 Air Quality Analytics</div>', unsafe_allow_html=True)
+        
+        avg_aqi = df['aqi'].mean()
+        st.markdown(f"""
+        <div class="metric-container">
+            <div class="metric-label">Average AQI Across All Stations</div>
+            <div class="metric-value">{avg_aqi:.1f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📍 Station-wise AQI Levels")
+            st.bar_chart(df.set_index('station_name')['aqi'])
+        
+        with col2:
+            st.markdown("### 📈 Distribution Statistics")
+            st.metric("Highest AQI", f"{df['aqi'].max():.0f}", delta=None)
+            st.metric("Lowest AQI", f"{df['aqi'].min():.0f}", delta=None)
+            st.metric("Total Stations", len(df))
+        
+        st.markdown('</div>', unsafe_allow_html=True)
