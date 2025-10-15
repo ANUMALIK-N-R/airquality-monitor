@@ -9,9 +9,6 @@ import pydeck as pdk
 API_TOKEN = "97a0e712f47007556b57ab4b14843e72b416c0f9"
 DELHI_BOUNDS = "28.404,76.840,28.883,77.349"
 
-# Optional: if you have a Mapbox token, you can use it
-MAPBOX_TOKEN = None  # "YOUR_MAPBOX_TOKEN"
-
 # ==========================
 # HELPER FUNCTIONS
 # ==========================
@@ -69,7 +66,8 @@ if df.empty:
 else:
     if tab == "Map":
         st.subheader("Live AQI Map")
-        # Create a Pydeck ScatterplotLayer
+
+        # Pydeck ScatterplotLayer for pins
         layer = pdk.Layer(
             "ScatterplotLayer",
             data=df,
@@ -85,7 +83,7 @@ else:
         }
 
         st.pydeck_chart(pdk.Deck(
-            map_style='mapbox://styles/mapbox/light-v9',
+            map_style="light",  # No Mapbox token needed
             initial_view_state=pdk.ViewState(
                 latitude=28.6139,
                 longitude=77.2090,
@@ -93,8 +91,7 @@ else:
                 pitch=0,
             ),
             layers=[layer],
-            tooltip=tooltip,
-            mapbox_key=MAPBOX_TOKEN
+            tooltip=tooltip
         ))
 
     elif tab == "Alerts":
