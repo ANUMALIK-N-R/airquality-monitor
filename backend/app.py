@@ -4,7 +4,7 @@ import numpy as np
 import requests
 import pydeck as pdk
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ==========================
 # PAGE CONFIGURATION
