@@ -368,6 +368,40 @@ def render_header(df):
 def render_map_tab(df):
     """Renders the interactive map of AQI stations."""
     st.markdown('<div class="section-header">📍 Interactive Air Quality Map</div>', unsafe_allow_html=True)
+    
+    # Add Legend
+    st.markdown("""
+    <div style="background-color: white; padding: 1rem; border-radius: 10px; border: 2px solid #BBDEFB; margin-bottom: 1rem;">
+        <div style="font-weight: 700; color: #0D47A1; margin-bottom: 0.75rem; font-size: 1.1rem;">AQI Color Legend</div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 20px; height: 20px; border-radius: 50%; background-color: rgb(0, 158, 96);"></div>
+                <span style="color: #1E293B; font-weight: 500;">Good (0-50)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 20px; height: 20px; border-radius: 50%; background-color: rgb(255, 214, 0);"></div>
+                <span style="color: #1E293B; font-weight: 500;">Moderate (51-100)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 20px; height: 20px; border-radius: 50%; background-color: rgb(249, 115, 22);"></div>
+                <span style="color: #1E293B; font-weight: 500;">Unhealthy for Sensitive (101-150)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 20px; height: 20px; border-radius: 50%; background-color: rgb(220, 38, 38);"></div>
+                <span style="color: #1E293B; font-weight: 500;">Unhealthy (151-200)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 20px; height: 20px; border-radius: 50%; background-color: rgb(147, 51, 234);"></div>
+                <span style="color: #1E293B; font-weight: 500;">Very Unhealthy (201-300)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 20px; height: 20px; border-radius: 50%; background-color: rgb(126, 34, 206);"></div>
+                <span style="color: #1E293B; font-weight: 500;">Hazardous (300+)</span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.pydeck_chart(pdk.Deck(
         map_style="light",
         initial_view_state=pdk.ViewState(latitude=DELHI_LAT, longitude=DELHI_LON, zoom=9.5, pitch=50),
@@ -426,7 +460,12 @@ def render_analytics_tab(df):
             }
         )
         fig.update_traces(textinfo='percent+label', pull=[0.05]*len(category_counts.index))
-        fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0))
+        fig.update_layout(
+            showlegend=False, 
+            margin=dict(t=0, b=0, l=0, r=0),
+            paper_bgcolor='white',
+            plot_bgcolor='white'
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     with c2:
@@ -436,7 +475,16 @@ def render_analytics_tab(df):
             top_10, x='aqi', y='station_name', orientation='h',
             color='aqi', color_continuous_scale=px.colors.sequential.Reds
         )
-        fig.update_layout(xaxis_title="AQI", yaxis_title="", showlegend=False, margin=dict(t=20, b=20, l=0, r=20))
+        fig.update_layout(
+            xaxis_title="AQI", 
+            yaxis_title="", 
+            showlegend=False, 
+            margin=dict(t=20, b=20, l=0, r=20),
+            paper_bgcolor='white',
+            plot_bgcolor='white',
+            xaxis=dict(gridcolor='#E5E7EB'),
+            yaxis=dict(gridcolor='#E5E7EB')
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("**Full Station Data**")
