@@ -23,9 +23,9 @@ DELHI_LAT = 28.6139
 DELHI_LON = 77.2090
 
 # Twilio Configuration (you need to add your credentials)
-TWILIO_ACCOUNT_SID = "your_twilio_account_sid"
-TWILIO_AUTH_TOKEN = "your_twilio_auth_token"
-TWILIO_PHONE_NUMBER = "your_twilio_phone_number"
+TWILIO_ACCOUNT_SID = "AC2cc57109fc63de336609901187eca69d"
+TWILIO_AUTH_TOKEN = "62b791789bb490f91879e89fa2ed959d"
+TWILIO_PHONE_NUMBER = "+13856005348"
 
 # ==========================
 # CUSTOM CSS FOR STYLING
