@@ -8,6 +8,8 @@ import pydeck as pdk
 # ==========================
 API_TOKEN = "97a0e712f47007556b57ab4b14843e72b416c0f9"
 DELHI_BOUNDS = "28.404,76.840,28.883,77.349"
+DELHI_LAT = 28.6139
+DELHI_LON = 77.2090
 
 # ==========================
 # CUSTOM CSS
@@ -95,6 +97,81 @@ st.markdown("""
     
     .stRadio > div > label > div[data-baseweb="radio"] > div:first-child {
         display: none !important;
+    }
+    
+    /* Weather Widget */
+    .weather-widget {
+        background: rgba(255, 255, 255, 0.5);
+        padding: 1.5rem;
+        border-radius: 20px;
+        box-shadow: 0 4px 20px rgba(33, 150, 243, 0.15);
+        border: 1px solid rgba(187, 222, 251, 0.5);
+        backdrop-filter: blur(10px);
+        text-align: center;
+    }
+    
+    .weather-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #1565C0;
+        margin-bottom: 1rem;
+    }
+    
+    .weather-temp {
+        font-size: 3rem;
+        font-weight: 800;
+        color: #0D47A1;
+        margin: 0.5rem 0;
+    }
+    
+    .weather-desc {
+        font-size: 1.1rem;
+        color: #1976D2;
+        font-weight: 500;
+        margin-bottom: 1rem;
+        text-transform: capitalize;
+    }
+    
+    .weather-details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .weather-detail-item {
+        background: white;
+        padding: 0.75rem;
+        border-radius: 10px;
+        border: 1px solid #BBDEFB;
+    }
+    
+    .weather-detail-label {
+        font-size: 0.85rem;
+        color: #1565C0;
+        font-weight: 600;
+    }
+    
+    .weather-detail-value {
+        font-size: 1.1rem;
+        color: #0D47A1;
+        font-weight: 700;
+        margin-top: 0.25rem;
+    }
+    
+    /* Navigation and Weather Container */
+    .nav-weather-container {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 1.5rem;
+        margin-bottom: 2.5rem;
+        align-items: start;
+    }
+    
+    @media (max-width: 768px) {
+        .nav-weather-container {
+            grid-template-columns: 1fr;
+        }
     }
     
     /* Content Cards */
@@ -249,6 +326,55 @@ def get_aqi_category(aqi):
     else:
         return "Hazardous", [126, 0, 35]
 
+@st.cache_data(ttl=600)
+def fetch_weather_data():
+    # Using Open-Meteo API (completely free, no API key needed)
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": DELHI_LAT,
+        "longitude": DELHI_LON,
+        "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code",
+        "timezone": "Asia/Kolkata"
+    }
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return None
+    except:
+        return None
+
+def get_weather_description(code):
+    """Convert WMO weather code to description"""
+    weather_codes = {
+        0: "Clear sky",
+        1: "Mainly clear",
+        2: "Partly cloudy",
+        3: "Overcast",
+        45: "Foggy",
+        48: "Foggy",
+        51: "Light drizzle",
+        53: "Moderate drizzle",
+        55: "Dense drizzle",
+        61: "Slight rain",
+        63: "Moderate rain",
+        65: "Heavy rain",
+        71: "Slight snow",
+        73: "Moderate snow",
+        75: "Heavy snow",
+        77: "Snow grains",
+        80: "Slight rain showers",
+        81: "Moderate rain showers",
+        82: "Violent rain showers",
+        85: "Slight snow showers",
+        86: "Heavy snow showers",
+        95: "Thunderstorm",
+        96: "Thunderstorm with hail",
+        99: "Thunderstorm with hail"
+    }
+    return weather_codes.get(code, "Unknown")
+
 # ==========================
 # FETCH LIVE DATA
 # ==========================
@@ -287,8 +413,49 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Navigation
-tab = st.radio("", ["🗺️ Live Map", "🔔 Alerts", "📊 Analytics"], horizontal=True, label_visibility="collapsed")
+# Navigation and Weather in Grid
+col_nav, col_weather = st.columns([2, 1])
+
+with col_nav:
+    # Navigation
+    tab = st.radio("", ["🗺️ Live Map", "🔔 Alerts", "📊 Analytics"], horizontal=True, label_visibility="collapsed")
+
+with col_weather:
+    # Weather Widget
+    weather_data = fetch_weather_data()
+    if weather_data and 'current' in weather_data:
+        current = weather_data['current']
+        temp = current['temperature_2m']
+        humidity = current['relative_humidity_2m']
+        wind_speed = current['wind_speed_10m']
+        weather_code = current.get('weather_code', 0)
+        description = get_weather_description(weather_code)
+        
+        st.markdown(f"""
+        <div class="weather-widget">
+            <div class="weather-title">🌤️ Delhi Weather</div>
+            <div class="weather-temp">{temp:.1f}°C</div>
+            <div class="weather-desc">{description}</div>
+            <div class="weather-details">
+                <div class="weather-detail-item">
+                    <div class="weather-detail-label">Humidity</div>
+                    <div class="weather-detail-value">{humidity}%</div>
+                </div>
+                <div class="weather-detail-item">
+                    <div class="weather-detail-label">Wind Speed</div>
+                    <div class="weather-detail-value">{wind_speed} km/h</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class="weather-widget">
+            <div class="weather-title">🌤️ Delhi Weather</div>
+            <div class="weather-desc" style="margin-top: 1rem;">Weather data unavailable</div>
+            <div style="font-size: 0.9rem; color: #1976D2; margin-top: 0.5rem;">Please check your connection</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 # Fetch Data
 df = fetch_live_data()
