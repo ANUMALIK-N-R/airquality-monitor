@@ -323,6 +323,109 @@ def get_weather_info(code):
     }
     return codes.get(code, ("Unknown", "❓"))
 
+def calculate_distance(lat1, lon1, lat2, lon2):
+    """Calculate distance between two coordinates using Haversine formula."""
+    from math import radians, sin, cos, sqrt, atan2
+    
+    R = 6371  # Earth's radius in kilometers
+    
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    
+    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    c = 2 * atan2(sqrt(a), sqrt(1-a))
+    distance = R * c
+    
+    return distance
+
+def get_nearby_stations(df, user_lat, user_lon, radius_km=10):
+    """Get stations within specified radius of user location."""
+    df['distance'] = df.apply(
+        lambda row: calculate_distance(user_lat, user_lon, row['lat'], row['lon']),
+        axis=1
+    )
+    nearby = df[df['distance'] <= radius_km].sort_values('distance')
+    return nearby
+
+def send_sms_alert(phone_number, message):
+    """Send SMS alert using Twilio."""
+    try:
+        from twilio.rest import Client
+        
+        # Check if credentials are configured
+        if TWILIO_ACCOUNT_SID == "your_twilio_account_sid" or not TWILIO_ACCOUNT_SID.startswith("AC"):
+            return False, "⚠️ Twilio Account SID not configured correctly. It should start with 'AC' and be 34 characters long."
+        
+        if TWILIO_AUTH_TOKEN == "your_twilio_auth_token" or len(TWILIO_AUTH_TOKEN) < 30:
+            return False, "⚠️ Twilio Auth Token not configured correctly. It should be 32 characters long."
+        
+        if TWILIO_PHONE_NUMBER == "your_twilio_phone_number" or not TWILIO_PHONE_NUMBER.startswith("+"):
+            return False, "⚠️ Twilio Phone Number not configured correctly. It should start with '+' and include country code."
+        
+        # Validate recipient phone number
+        if not phone_number.startswith("+"):
+            return False, "⚠️ Recipient phone number must include country code starting with '+'"
+        
+        # Create Twilio client
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        
+        # Send message
+        sent_message = client.messages.create(
+            body=message,
+            from_=TWILIO_PHONE_NUMBER,
+            to=phone_number
+        )
+        
+        return True, f"✅ Alert sent successfully! Message SID: {sent_message.sid}"
+    except ImportError:
+        return False, "❌ Twilio library not installed. Run: pip install twilio"
+    except Exception as e:
+        error_msg = str(e)
+        if "401" in error_msg or "authenticate" in error_msg.lower():
+            return False, f"🔐 Authentication Error: Your Twilio credentials are incorrect.\n\n✓ Check Account SID (starts with 'AC')\n✓ Check Auth Token (click eye icon 👁️ in console to reveal)\n✓ Make sure there are no extra spaces\n\nError details: {error_msg}"
+        elif "unverified" in error_msg.lower():
+            return False, f"📱 Phone Number Not Verified: For trial accounts, you must verify the recipient number in Twilio Console.\n\nGo to: https://console.twilio.com/us1/develop/phone-numbers/manage/verified\n\nError details: {error_msg}"
+        else:
+            return False, f"❌ Error sending SMS: {error_msg}"
+
+def create_alert_message(nearby_stations, weather_data, location_name):
+    """Create alert message with AQI and weather information."""
+    if nearby_stations.empty:
+        return "No nearby air quality monitoring stations found."
+    
+    # Get average AQI and worst station
+    avg_aqi = nearby_stations['aqi'].mean()
+    worst_station = nearby_stations.iloc[0]
+    
+    # Get weather info
+    weather_desc = "N/A"
+    temp = "N/A"
+    if weather_data and 'current' in weather_data:
+        current = weather_data['current']
+        weather_desc, _ = get_weather_info(current.get('weather_code', 0))
+        temp = f"{current['temperature_2m']:.1f}°C"
+    
+    # Create message
+    category, _, emoji, advice = get_aqi_category(avg_aqi)
+    
+    message = f"""🌍 Air Quality Alert - {location_name}
+
+{emoji} AQI Status: {category}
+📊 Average AQI: {avg_aqi:.0f}
+
+🔴 Worst Station: {worst_station['station_name']}
+AQI: {worst_station['aqi']:.0f} ({worst_station['distance']:.1f} km away)
+
+🌤️ Weather: {weather_desc}
+🌡️ Temperature: {temp}
+
+💡 Advice: {advice}
+
+Stay safe!"""
+    
+    return message
+
 # ==========================
 # UI RENDERING FUNCTIONS
 # ==========================
@@ -448,6 +551,105 @@ def render_alerts_tab(df):
     if not has_alerts:
         st.success("✅ No significant air quality alerts at the moment. AQI levels are currently within the good to moderate range for most areas.", icon="✅")
 
+def render_alert_subscription_tab(df):
+    """Renders alert subscription form."""
+    st.markdown('<div class="section-header">📱 SMS Alert Subscription</div>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div style="background-color: #E3F2FD; padding: 1rem; border-radius: 10px; border-left: 4px solid #2196F3; margin-bottom: 1.5rem;">
+        <p style="color: #0D47A1; margin: 0; font-weight: 500;">
+        📍 Get real-time air quality and weather alerts for your location via SMS. 
+        We'll find the nearest monitoring stations and send you personalized updates.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        location_name = st.text_input(
+            "📍 Your Location Name",
+            placeholder="e.g., Connaught Place, New Delhi",
+            help="Enter your area/locality name"
+        )
+        
+        user_lat = st.number_input(
+            "Latitude",
+            min_value=28.4,
+            max_value=28.9,
+            value=28.6139,
+            step=0.0001,
+            format="%.4f",
+            help="Your location's latitude"
+        )
+        
+        user_lon = st.number_input(
+            "Longitude",
+            min_value=76.8,
+            max_value=77.4,
+            value=77.2090,
+            step=0.0001,
+            format="%.4f",
+            help="Your location's longitude"
+        )
+    
+    with col2:
+        phone_number = st.text_input(
+            "📱 Phone Number",
+            placeholder="+91XXXXXXXXXX",
+            help="Enter with country code (e.g., +919876543210)"
+        )
+        
+        radius = st.slider(
+            "Search Radius (km)",
+            min_value=1,
+            max_value=20,
+            value=10,
+            help="Find stations within this radius"
+        )
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        send_alert_btn = st.button("📤 Send Alert Now", type="primary", use_container_width=True)
+    
+    if send_alert_btn:
+        if not location_name or not phone_number:
+            st.error("Please fill in all required fields: Location Name and Phone Number", icon="⚠️")
+        elif not phone_number.startswith('+'):
+            st.error("Phone number must include country code (e.g., +919876543210)", icon="⚠️")
+        else:
+            with st.spinner("Finding nearby stations and preparing alert..."):
+                # Get nearby stations
+                nearby_stations = get_nearby_stations(df, user_lat, user_lon, radius)
+                
+                if nearby_stations.empty:
+                    st.warning(f"No monitoring stations found within {radius} km of your location. Try increasing the search radius.", icon="⚠️")
+                else:
+                    # Get weather data
+                    weather_data = fetch_weather_data()
+                    
+                    # Create alert message
+                    alert_message = create_alert_message(nearby_stations, weather_data, location_name)
+                    
+                    # Display preview
+                    st.markdown("### 📄 Alert Preview")
+                    st.info(alert_message)
+                    
+                    # Show nearby stations
+                    st.markdown("### 📍 Nearby Monitoring Stations")
+                    display_nearby = nearby_stations[['station_name', 'aqi', 'category', 'distance']].head(5)
+                    display_nearby['distance'] = display_nearby['distance'].round(2).astype(str) + ' km'
+                    st.dataframe(display_nearby, use_container_width=True, hide_index=True)
+                    
+                    # Send SMS
+                    success, message = send_sms_alert(phone_number, alert_message)
+                    
+                    if success:
+                        st.success(message, icon="✅")
+                    else:
+                        st.error(message, icon="❌")
+                        st.info("💡 **Note:** To enable SMS alerts, you need to:\n1. Sign up for Twilio (free trial available)\n2. Get your Account SID, Auth Token, and Phone Number\n3. Update the configuration in the code\n4. Install Twilio: `pip install twilio`", icon="ℹ️")
+
 def render_analytics_tab(df):
     """Renders charts and data analytics."""
     st.markdown('<div class="section-header">📊 Data Analytics</div>', unsafe_allow_html=True)
@@ -505,7 +707,7 @@ render_header(aqi_data)
 if aqi_data.empty:
     st.error("⚠️ **Could not fetch live AQI data.** The API may be down or there's a network issue. Please try again later.", icon="🚨")
 else:
-    tab1, tab2, tab3 = st.tabs(["🗺️ Live Map", "🔔 Alerts & Health", "📊 Analytics"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🗺️ Live Map", "🔔 Alerts & Health", "📊 Analytics", "📱 SMS Alerts"])
     with tab1:
         with st.container():
              st.markdown('<div class="content-card">', unsafe_allow_html=True)
@@ -520,4 +722,9 @@ else:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
             render_analytics_tab(aqi_data)
+            st.markdown('</div>', unsafe_allow_html=True)
+    with tab4:
+        with st.container():
+            st.markdown('<div class="content-card">', unsafe_allow_html=True)
+            render_alert_subscription_tab(aqi_data)
             st.markdown('</div>', unsafe_allow_html=True)
