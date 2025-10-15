@@ -724,15 +724,17 @@ def render_dummy_forecast_tab():
         markers=True,
         line_shape="spline"
     )
-    fig.update_layout( 
-        xaxis_title="AQI", 
-        yaxis_title="", 
-        showlegend=False, 
-        margin=dict(t=20, b=20, l=0, r=20), 
-        paper_bgcolor='#F5F5F5', 
-        plot_bgcolor='#F5F5F5', 
-        xaxis=dict(gridcolor='#DDDDDD'), 
-        yaxis=dict(gridcolor='#DDDDDD') 
+    fig.update_layout(
+        xaxis_title="Time",
+        yaxis_title="Predicted AQI",
+        showlegend=False,
+        margin=dict(t=40, b=20, l=0, r=20),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        title_font_color="#0D47A1",
+        font_color="#0D47A1",
+        xaxis=dict(gridcolor='#E3F2FD'),
+        yaxis=dict(gridcolor='#E3F2FD')
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -743,13 +745,12 @@ def render_dummy_forecast_tab():
     min_aqi = forecast_df["forecast_aqi"].min()
 
     st.markdown(f"""
-    <div style="background-color: white; padding: 1rem; border-radius: 10px; border-left: 5px solid #1976D2; margin-top: 1rem;">
+    <div style="background-color: white; padding: 1rem; border-radius: 10px; border-left: 5px solid #1976D2; margin-top: 1rem; color: #1E293B;">
         <b>Average Forecasted AQI:</b> {avg_aqi:.1f}  
         <br><b>Expected Range:</b> {min_aqi:.1f} – {max_aqi:.1f}
         <br><b>Air Quality Outlook:</b> Moderate to Unhealthy range over the next day.
     </div>
     """, unsafe_allow_html=True)
-
 
 def render_analytics_tab(df):
     """Renders charts and data analytics."""
