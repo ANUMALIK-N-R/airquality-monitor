@@ -229,8 +229,28 @@ def fetch_live_data():
             df['aqi'] = pd.to_numeric(df['aqi'], errors='coerce')
             df = df.dropna(subset=['aqi'])
             # Robustly extract station name and last updated time
-            df['station_name'] = df['station'].apply(lambda x: x.get('name', 'N/A') if isinstance(x, dict) else 'N/A')
-            df['last_updated'] = df['station'].apply(lambda x: x.get('time', {}).get('s', 'N/A') if isinstance(x, dict) else 'N/A')
+            def safe_get_name(x):
+                if isinstance(x, dict):
+                    return x.get('name', 'N/A')
+                elif isinstance(x, str):
+                    return x
+                else:
+                    return 'N/A'
+            
+            def safe_get_time(x):
+                if isinstance(x, dict):
+                    time_data = x.get('time', {})
+                    if isinstance(time_data, dict):
+                        return time_data.get('s', 'N/A')
+                    elif isinstance(time_data, str):
+                        return time_data
+                    else:
+                        return 'N/A'
+                else:
+                    return 'N/A'
+            
+            df['station_name'] = df['station'].apply(safe_get_name)
+            df['last_updated'] = df['station'].apply(safe_get_time)
             df[['category', 'color', 'emoji', 'advice']] = df['aqi'].apply(get_aqi_category).apply(pd.Series)
             df['lat'] = pd.to_numeric(df['lat'], errors='coerce')
             df['lon'] = pd.to_numeric(df['lon'], errors='coerce')
