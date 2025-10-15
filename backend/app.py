@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime
+import pydeck as pdk
 
 # ==========================
 # CONFIGURATION
@@ -9,27 +9,30 @@ from datetime import datetime
 API_TOKEN = "97a0e712f47007556b57ab4b14843e72b416c0f9"
 DELHI_BOUNDS = "28.404,76.840,28.883,77.349"
 
+# Optional: if you have a Mapbox token, you can use it
+MAPBOX_TOKEN = None  # "YOUR_MAPBOX_TOKEN"
+
 # ==========================
 # HELPER FUNCTIONS
 # ==========================
 def get_aqi_category(aqi):
     if aqi <= 50:
-        return "Good"
+        return "Good", [0, 228, 0]
     elif aqi <= 100:
-        return "Moderate"
+        return "Moderate", [255, 255, 0]
     elif aqi <= 150:
-        return "Unhealthy for Sensitive"
+        return "Unhealthy for Sensitive", [255, 126, 0]
     elif aqi <= 200:
-        return "Unhealthy"
+        return "Unhealthy", [255, 0, 0]
     elif aqi <= 300:
-        return "Very Unhealthy"
+        return "Very Unhealthy", [143, 63, 151]
     else:
-        return "Hazardous"
+        return "Hazardous", [126, 0, 35]
 
 # ==========================
 # FETCH LIVE DATA
 # ==========================
-@st.cache_data(ttl=600)  # cache for 10 minutes
+@st.cache_data(ttl=600)
 def fetch_live_data():
     url = "https://api.waqi.info/map/bounds/"
     params = {"latlng": DELHI_BOUNDS, "token": API_TOKEN}
@@ -42,7 +45,7 @@ def fetch_live_data():
             df['aqi'] = df['aqi'].astype(float)
             df['station_name'] = df['station'].apply(lambda x: x.get('name', 'N/A'))
             df['last_updated'] = df['station'].apply(lambda x: x.get('time', 'N/A'))
-            df['category'] = df['aqi'].map(get_aqi_category)
+            df['category'], df['color'] = zip(*df['aqi'].map(get_aqi_category))
             df['lat'] = df['lat'].astype(float)
             df['lon'] = df['lon'].astype(float)
             return df
@@ -66,8 +69,33 @@ if df.empty:
 else:
     if tab == "Map":
         st.subheader("Live AQI Map")
-        # st.map expects columns 'lat' and 'lon'
-        st.map(df.rename(columns={"lat": "latitude", "lon": "longitude"}), zoom=10)
+        # Create a Pydeck ScatterplotLayer
+        layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=df,
+            get_position='[lon, lat]',
+            get_fill_color='color',
+            get_radius=300,
+            pickable=True,
+        )
+
+        tooltip = {
+            "html": "<b>{station_name}</b><br/>AQI: {aqi}<br/>Category: {category}<br/>Last Updated: {last_updated}",
+            "style": {"color": "white"}
+        }
+
+        st.pydeck_chart(pdk.Deck(
+            map_style='mapbox://styles/mapbox/light-v9',
+            initial_view_state=pdk.ViewState(
+                latitude=28.6139,
+                longitude=77.2090,
+                zoom=10,
+                pitch=0,
+            ),
+            layers=[layer],
+            tooltip=tooltip,
+            mapbox_key=MAPBOX_TOKEN
+        ))
 
     elif tab == "Alerts":
         st.subheader("🔔 Alerts")
