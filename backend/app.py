@@ -16,7 +16,7 @@ st.markdown("""
 <style>
     /* Global Styles */
     .stApp {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 50%, #90CAF9 100%);
     }
     
     /* Main Container */
@@ -29,24 +29,25 @@ st.markdown("""
         background: white;
         padding: 2rem;
         border-radius: 20px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        box-shadow: 0 10px 40px rgba(33, 150, 243, 0.2);
         margin-bottom: 2rem;
         text-align: center;
+        border: 2px solid #2196F3;
     }
     
     .main-title {
         font-size: 2.5rem;
         font-weight: 800;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 0.5rem;
     }
     
     .subtitle {
-        color: #666;
+        color: #1565C0;
         font-size: 1.1rem;
-        font-weight: 400;
+        font-weight: 500;
     }
     
     /* Navigation Tabs */
@@ -54,8 +55,9 @@ st.markdown("""
         background: white;
         padding: 1rem;
         border-radius: 15px;
-        box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+        box-shadow: 0 5px 20px rgba(33, 150, 243, 0.15);
         margin-bottom: 2rem;
+        border: 2px solid #BBDEFB;
     }
     
     .stRadio > div > label {
@@ -65,15 +67,17 @@ st.markdown("""
     }
     
     .stRadio > div > label > div {
-        background: #f8f9fa !important;
+        background: #E3F2FD !important;
+        color: #1565C0 !important;
         padding: 0.75rem 2rem !important;
         border-radius: 10px !important;
         transition: all 0.3s ease;
         cursor: pointer;
+        font-weight: 600;
     }
     
     .stRadio > div > label > div:hover {
-        background: #e9ecef !important;
+        background: #BBDEFB !important;
         transform: translateY(-2px);
     }
     
@@ -82,14 +86,15 @@ st.markdown("""
         background: white;
         padding: 2rem;
         border-radius: 20px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        box-shadow: 0 10px 40px rgba(33, 150, 243, 0.2);
         margin-bottom: 1.5rem;
+        border: 2px solid #BBDEFB;
     }
     
     .section-title {
         font-size: 1.8rem;
         font-weight: 700;
-        color: #333;
+        color: #1565C0;
         margin-bottom: 1.5rem;
         display: flex;
         align-items: center;
@@ -101,61 +106,66 @@ st.markdown("""
         background: white;
         padding: 1.5rem;
         border-radius: 20px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        box-shadow: 0 10px 40px rgba(33, 150, 243, 0.2);
+        border: 2px solid #BBDEFB;
     }
     
     /* Alert Cards */
     .alert-card {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        background: linear-gradient(135deg, #EF5350 0%, #E53935 100%);
         color: white;
         padding: 1.5rem;
         border-radius: 15px;
         margin-bottom: 1rem;
-        box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        box-shadow: 0 5px 20px rgba(239, 83, 80, 0.3);
     }
     
     .alert-card-warning {
-        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
     }
     
     .alert-card-caution {
-        background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+        background: linear-gradient(135deg, #FFA726 0%, #FB8C00 100%);
     }
     
     .alert-title {
         font-size: 1.3rem;
         font-weight: 700;
         margin-bottom: 1rem;
+        color: white;
     }
     
     .alert-item {
-        background: rgba(255,255,255,0.2);
+        background: rgba(255,255,255,0.25);
         padding: 0.75rem;
         border-radius: 10px;
         margin-bottom: 0.5rem;
         backdrop-filter: blur(10px);
+        color: white;
     }
     
     /* Metrics */
     .metric-container {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
         color: white;
         padding: 2rem;
         border-radius: 20px;
         text-align: center;
         margin-bottom: 2rem;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        box-shadow: 0 10px 40px rgba(33, 150, 243, 0.3);
     }
     
     .metric-label {
         font-size: 1rem;
-        opacity: 0.9;
+        opacity: 0.95;
         margin-bottom: 0.5rem;
+        color: white;
     }
     
     .metric-value {
         font-size: 3rem;
         font-weight: 800;
+        color: white;
     }
     
     /* Charts */
@@ -163,22 +173,40 @@ st.markdown("""
         background: white;
         padding: 1.5rem;
         border-radius: 15px;
-        box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+        box-shadow: 0 5px 20px rgba(33, 150, 243, 0.15);
+        border: 2px solid #E3F2FD;
+    }
+    
+    div[data-testid="stMetric"] label {
+        color: #1565C0 !important;
+        font-weight: 600;
+    }
+    
+    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+        color: #1976D2 !important;
+    }
+    
+    /* Markdown Headers in Cards */
+    .content-card h3 {
+        color: #1565C0;
+        font-weight: 700;
     }
     
     /* Warning Messages */
     .stWarning {
         background: white;
-        border-left: 5px solid #ff6b6b;
+        border-left: 5px solid #FF9800;
         border-radius: 10px;
         padding: 1.5rem;
+        color: #E65100;
     }
     
     .stSuccess {
         background: white;
-        border-left: 5px solid #51cf66;
+        border-left: 5px solid #4CAF50;
         border-radius: 10px;
         padding: 1.5rem;
+        color: #2E7D32;
     }
     
     /* Hide Streamlit Branding */
