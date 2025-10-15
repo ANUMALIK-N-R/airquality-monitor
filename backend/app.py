@@ -680,15 +680,33 @@ def render_dummy_forecast_tab():
         markers=True,
         line_shape="spline"
     )
-
     fig.update_layout(
-        xaxis_title="Time",
-        yaxis_title="Predicted AQI",
-        paper_bgcolor='#F5F5F5',
-        plot_bgcolor='#F5F5F5',
-        xaxis=dict(gridcolor='#DDDDDD'),
-        yaxis=dict(gridcolor='#DDDDDD')
+    xaxis_title="Time",
+    yaxis_title="Predicted AQI",
+    paper_bgcolor='#F5F5F5',
+    plot_bgcolor='#F5F5F5',
+    font=dict(
+        color="#0D47A1",        # Dark blue text for all labels
+        size=14,
+        family="Inter, sans-serif"
+    ),
+    title=dict(
+        font=dict(size=18, color="#0D47A1", family="Inter, sans-serif"),
+        x=0.5,
+        xanchor='center'
+    ),
+    xaxis=dict(
+        gridcolor='#DDDDDD',
+        tickfont=dict(color="#0D47A1"),
+        titlefont=dict(color="#0D47A1")
+    ),
+    yaxis=dict(
+        gridcolor='#DDDDDD',
+        tickfont=dict(color="#0D47A1"),
+        titlefont=dict(color="#0D47A1")
     )
+)
+
     st.plotly_chart(fig, use_container_width=True)
 
     # Display summary
