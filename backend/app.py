@@ -14,17 +14,17 @@ DELHI_BOUNDS = "28.404,76.840,28.883,77.349"
 # ==========================
 def get_aqi_category(aqi):
     if aqi <= 50:
-        return "Good", [0, 228, 0], "No risk", "✅"
+        return "Good", [0, 228, 0], "✅"
     elif aqi <= 100:
-        return "Moderate", [255, 255, 0], "Minor breathing discomfort for sensitive people", "🤔"
+        return "Moderate", [255, 255, 0], "🤔"
     elif aqi <= 150:
-        return "Unhealthy for Sensitive", [255, 126, 0], "Breathing discomfort for sensitive groups", "😷"
+        return "Unhealthy for Sensitive", [255, 126, 0], "😷"
     elif aqi <= 200:
-        return "Unhealthy", [255, 0, 0], "Breathing discomfort for most people", "🔴"
+        return "Unhealthy", [255, 0, 0], "🔴"
     elif aqi <= 300:
-        return "Very Unhealthy", [143, 63, 151], "Respiratory illness on prolonged exposure", "🟣"
+        return "Very Unhealthy", [143, 63, 151], "🟣"
     else:
-        return "Hazardous", [126, 0, 35], "Serious respiratory impacts", "☠️"
+        return "Hazardous", [126, 0, 35], "☠️"
 
 # ==========================
 # FETCH LIVE DATA
@@ -42,7 +42,7 @@ def fetch_live_data():
             df['aqi'] = df['aqi'].astype(float)
             df['station_name'] = df['station'].apply(lambda x: x.get('name', 'N/A'))
             df['last_updated'] = df['station'].apply(lambda x: x.get('time', 'N/A'))
-            df['category'], df['color'], df['action'], df['emoji'] = zip(*df['aqi'].map(get_aqi_category))
+            df['category'], df['color'], df['emoji'] = zip(*df['aqi'].map(get_aqi_category))
             df['lat'] = df['lat'].astype(float)
             df['lon'] = df['lon'].astype(float)
             return df
@@ -86,6 +86,8 @@ def local_css():
 # ==========================
 def render_map_tab(df):
     st.subheader("📍 Live Air Quality Map")
+    
+    # Metrics cards
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(f"<div class='card'><p class='metric-label'>Average AQI</p><p class='metric-value'>{df['aqi'].mean():.1f}</p></div>", unsafe_allow_html=True)
@@ -93,7 +95,7 @@ def render_map_tab(df):
         st.markdown(f"<div class='card'><p class='metric-label'>Min AQI</p><p class='metric-value'>{df['aqi'].min():.0f}</p><p class='metric-label'>{df.loc[df['aqi'].idxmin()]['station_name']}</p></div>", unsafe_allow_html=True)
     with col3:
         st.markdown(f"<div class='card'><p class='metric-label'>Max AQI</p><p class='metric-value'>{df['aqi'].max():.0f}</p><p class='metric-label'>{df.loc[df['aqi'].idxmax()]['station_name']}</p></div>", unsafe_allow_html=True)
-
+    
     # Pydeck ScatterplotLayer for pins
     layer = pdk.Layer(
         "ScatterplotLayer",
