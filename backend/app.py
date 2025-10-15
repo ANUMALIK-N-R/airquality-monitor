@@ -26,59 +26,61 @@ st.markdown("""
     
     /* Header */
     .header-container {
-        background: white;
-        padding: 2rem;
-        border-radius: 20px;
-        box-shadow: 0 10px 40px rgba(33, 150, 243, 0.2);
+        background: transparent;
+        padding: 1.5rem 0;
         margin-bottom: 2rem;
         text-align: center;
-        border: 2px solid #2196F3;
     }
     
     .main-title {
-        font-size: 2.5rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        font-size: 3.5rem;
+        font-weight: 900;
+        color: #0D47A1;
         margin-bottom: 0.5rem;
+        text-shadow: 2px 2px 4px rgba(13, 71, 161, 0.2);
+        letter-spacing: -1px;
     }
     
     .subtitle {
         color: #1565C0;
-        font-size: 1.1rem;
+        font-size: 1.2rem;
         font-weight: 500;
     }
     
     /* Navigation Tabs */
     .stRadio > div {
-        background: white;
-        padding: 1rem;
-        border-radius: 15px;
-        box-shadow: 0 5px 20px rgba(33, 150, 243, 0.15);
-        margin-bottom: 2rem;
-        border: 2px solid #BBDEFB;
+        background: transparent;
+        padding: 0;
+        border-radius: 0;
+        box-shadow: none;
+        margin-bottom: 2.5rem;
+        border: none;
     }
     
     .stRadio > div > label {
         display: flex;
-        gap: 1rem;
+        gap: 1.5rem;
         justify-content: center;
+        flex-wrap: wrap;
     }
     
     .stRadio > div > label > div {
-        background: #E3F2FD !important;
+        background: white !important;
         color: #1565C0 !important;
-        padding: 0.75rem 2rem !important;
-        border-radius: 10px !important;
+        padding: 1rem 2.5rem !important;
+        border-radius: 50px !important;
         transition: all 0.3s ease;
         cursor: pointer;
         font-weight: 600;
+        font-size: 1.1rem;
+        box-shadow: 0 4px 15px rgba(33, 150, 243, 0.2);
+        border: 2px solid #BBDEFB !important;
     }
     
     .stRadio > div > label > div:hover {
-        background: #BBDEFB !important;
-        transform: translateY(-2px);
+        background: #E3F2FD !important;
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(33, 150, 243, 0.3);
     }
     
     /* Content Cards */
