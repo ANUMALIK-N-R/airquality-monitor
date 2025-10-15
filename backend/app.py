@@ -10,29 +10,27 @@ from datetime import datetime
 API_TOKEN = "97a0e712f47007556b57ab4b14843e72b416c0f9"
 DELHI_BOUNDS = "28.404,76.840,28.883,77.349"
 
-# Helper to categorize AQI
-
-
+# ==========================
+# HELPER FUNCTIONS
+# ==========================
 def get_aqi_category(aqi):
     if aqi <= 50:
-        return "Good", "#00e400"
+        return "Good", [0, 228, 0]  # Green
     elif aqi <= 100:
-        return "Moderate", "#ffff00"
+        return "Moderate", [255, 255, 0]  # Yellow
     elif aqi <= 150:
-        return "Unhealthy for Sensitive", "#ff7e00"
+        return "Unhealthy for Sensitive", [255, 126, 0]  # Orange
     elif aqi <= 200:
-        return "Unhealthy", "#ff0000"
+        return "Unhealthy", [255, 0, 0]  # Red
     elif aqi <= 300:
-        return "Very Unhealthy", "#8f3f97"
+        return "Very Unhealthy", [143, 63, 151]  # Purple
     else:
-        return "Hazardous", "#7e0023"
+        return "Hazardous", [126, 0, 35]  # Maroon
 
 # ==========================
 # FETCH LIVE DATA
 # ==========================
-
-
-@st.cache(ttl=600)
+@st.cache_data(ttl=600)  # caches for 10 minutes
 def fetch_live_data():
     url = "https://api.waqi.info/map/bounds/"
     params = {"latlng": DELHI_BOUNDS, "token": API_TOKEN}
@@ -43,29 +41,25 @@ def fetch_live_data():
             df = pd.DataFrame(data["data"])
             df = df[df['aqi'] != "-"]
             df['aqi'] = df['aqi'].astype(float)
-            df['station_name'] = df['station'].apply(
-                lambda x: x.get('name', 'N/A'))
-            df['last_updated'] = df['station'].apply(
-                lambda x: x.get('time', 'N/A'))
+            df['station_name'] = df['station'].apply(lambda x: x.get('name', 'N/A'))
+            df['last_updated'] = df['station'].apply(lambda x: x.get('time', 'N/A'))
             df['category'], df['color'] = zip(*df['aqi'].map(get_aqi_category))
+            df['lon'] = df['lon'].astype(float)
+            df['lat'] = df['lat'].astype(float)
             return df
         else:
             return pd.DataFrame()
     except:
         return pd.DataFrame()
 
-
 # ==========================
 # STREAMLIT UI
 # ==========================
 st.set_page_config(layout="wide", page_title="Delhi NCR Air Quality")
-
 st.title("📍 Delhi NCR Air Quality Monitoring")
 
-# Tabs
 tab = st.radio("View:", ["Map", "Alerts", "Analytics"])
 
-# Fetch data
 df = fetch_live_data()
 
 if df.empty:
@@ -82,23 +76,27 @@ else:
                 pitch=0,
             ),
             layers=[
+                # Heatmap
                 pdk.Layer(
                     "HeatmapLayer",
                     data=df,
                     get_position='[lon, lat]',
                     get_weight="aqi",
-                    radius=500,
+                    radius=1000,
                     intensity=1,
                     threshold=0.05,
                 ),
+                # Scatter points
                 pdk.Layer(
                     "ScatterplotLayer",
                     data=df,
                     get_position='[lon, lat]',
                     get_fill_color='color',
                     get_radius=200,
+                    pickable=True,
                 ),
             ],
+            tooltip={"text": "{station_name}\nAQI: {aqi}\nCategory: {category}"}
         ))
 
     elif tab == "Alerts":
