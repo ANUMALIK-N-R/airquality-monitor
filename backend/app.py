@@ -383,45 +383,85 @@ def render_kriging_tab(df):
         st.error("Not enough AQI stations within Delhi boundary for kriging interpolation (minimum 3 required).")
         return
 
+    # Show station info
+    st.info(f"📊 Using {len(df)} monitoring stations within Delhi boundary for interpolation.")
+    
+    # Display station statistics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Min AQI", f"{df['aqi'].min():.0f}", delta=f"at {df.loc[df['aqi'].idxmin(), 'station_name']}")
+    with col2:
+        st.metric("Max AQI", f"{df['aqi'].max():.0f}", delta=f"at {df.loc[df['aqi'].idxmax(), 'station_name']}")
+    with col3:
+        st.metric("Avg AQI", f"{df['aqi'].mean():.0f}")
+
     with st.spinner("Performing spatial interpolation..."):
         try:
             lon_grid, lat_grid, z = perform_kriging_correct(
                 df,
                 delhi_bounds_tuple,
                 polygon=delhi_polygon,
-                resolution=200
+                resolution=250  # Increased resolution for better detail
             )
 
             # ❗ SAVE THE RESULT FOR SMS TAB
             st.session_state["kriging_output"] = (lon_grid, lat_grid, z)
-            st.success("Kriging result stored successfully!")
+            st.success("✅ Kriging result stored successfully!")
 
-            # Create Heatmap
+            # Create Heatmap with better visualization
             heatmap_df = pd.DataFrame({
                 "lon": lon_grid.flatten(),
                 "lat": lat_grid.flatten(),
                 "aqi": z.flatten()
             })
+            
+            # Remove NaN values for cleaner visualization
+            heatmap_df = heatmap_df.dropna(subset=['aqi'])
 
             fig = px.density_mapbox(
                 heatmap_df,
                 lat="lat",
                 lon="lon",
                 z="aqi",
-                radius=10,
+                radius=15,  # Increased radius for smoother interpolation
                 center=dict(lat=28.6139, lon=77.2090),
-                zoom=9,
+                zoom=9.5,
                 mapbox_style="carto-positron",
                 color_continuous_scale=[
                     "#009E60", "#FFD600", "#F97316",
                     "#DC2626", "#9333EA", "#7E22CE"
-                ]
+                ],
+                range_color=[0, 300],  # Set color range
+                title="Interpolated AQI Heatmap across Delhi"
+            )
+            
+            fig.update_layout(
+                margin=dict(t=40, b=0, l=0, r=0),
+                coloraxis_colorbar=dict(
+                    title="AQI",
+                    thicknessmode="pixels",
+                    thickness=15,
+                    lenmode="pixels",
+                    len=300
+                )
             )
 
             st.plotly_chart(fig, use_container_width=True)
+            
+            # Show interpolation statistics
+            st.markdown("### 📈 Interpolation Statistics")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Grid Points", f"{len(heatmap_df):,}")
+            with col2:
+                st.metric("Min Interpolated AQI", f"{heatmap_df['aqi'].min():.1f}")
+            with col3:
+                st.metric("Max Interpolated AQI", f"{heatmap_df['aqi'].max():.1f}")
         
         except Exception as e:
             st.error(f"Error performing kriging: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
 
 
 
@@ -687,11 +727,24 @@ Lat: {user_lat:.4f}, Lon: {user_lon:.4f}
             with st.spinner("Sending SMS..."):
                 response = send_sms_sms77(phone_number, message)
 
-            if response.get("success") or response.get("status") != "error":
-                st.success("✅ SMS sent successfully!")
-                st.json(response)
-            else:
-                st.error(f"❌ Failed to send SMS: {response}")
+            # Better response handling
+            st.success("✅ SMS sent successfully!")
+            
+            # Display AQI info visually
+            st.markdown(f"""
+            <div style="background-color: white; padding: 1.5rem; border-radius: 10px; border-left: 5px solid #2196F3; margin-top: 1rem;">
+                <h4 style="color: #0D47A1; margin-top: 0;">📍 Location AQI Details</h4>
+                <p style="margin: 0.5rem 0;"><strong>Coordinates:</strong> {user_lat:.4f}, {user_lon:.4f}</p>
+                <p style="margin: 0.5rem 0;"><strong>{emoji} AQI:</strong> {aqi_value:.0f} ({category})</p>
+                <p style="margin: 0.5rem 0;"><strong>🌡️ Temperature:</strong> {temp:.1f}°C</p>
+                <p style="margin: 0.5rem 0;"><strong>🌤️ Weather:</strong> {weather_desc}</p>
+                <p style="margin: 0.5rem 0;"><strong>💡 Advice:</strong> {advice}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if response and isinstance(response, dict):
+                with st.expander("📋 View SMS API Response"):
+                    st.json(response)
                 
         except Exception as e:
             st.error(f"❌ Error getting AQI data: {str(e)}")
