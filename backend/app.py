@@ -833,34 +833,6 @@ Location: {user_lat:.4f}, {user_lon:.4f}
 Stay safe!
 """
 
-            # Send SMS using Infobip
-            success, sms_message = send_sms_via_infobip(phone_number, message)
-            
-            if success:
-                st.success(f"✅ {sms_message}")
-            else:
-                st.warning(f"⚠️ {sms_message}")
-                st.info("💡 Alert information shown below instead")
-            
-            # Display AQI info visually regardless of SMS status
-            st.markdown(f"""
-            <div style="background-color: white; padding: 1.5rem; border-radius: 10px; border-left: 5px solid #2196F3; margin-top: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <h3 style="color: #0D47A1; margin-top: 0;">📍 Your Location AQI Details</h3>
-                <hr style="border: 1px solid #BBDEFB; margin: 1rem 0;">
-                <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>📍 Coordinates:</strong> {user_lat:.4f}, {user_lon:.4f}</p>
-                <p style="margin: 0.5rem 0; font-size: 1.3rem;"><strong>{emoji} AQI:</strong> <span style="color: #DC2626; font-weight: 700;">{aqi_value:.0f}</span> <span style="color: #64748B;">({category})</span></p>
-                <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>🌡️ Temperature:</strong> {temp:.1f}°C</p>
-                <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>🌤️ Weather:</strong> {weather_desc}</p>
-                <hr style="border: 1px solid #BBDEFB; margin: 1rem 0;">
-                <p style="margin: 0.5rem 0; font-size: 1.05rem; color: #0D47A1;"><strong>💡 Health Advice:</strong><br>{advice}</p>
-            </div>
-            """, unsafe_allow_html=True)
-                
-        except Exception as e:
-            st.error(f"❌ Error getting AQI data: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
-
 
 def render_dummy_forecast_tab():
     """Render a dummy 24-hour AQI forecast using simulated data."""
