@@ -12,6 +12,25 @@ from shapely.geometry import Point
 import pyproj
 from shapely.ops import transform
 
+def load_delhi_boundary_from_url():
+    url = "https://raw.githubusercontent.com/govindtomar/india-admin-boundaries/main/delhi_boundary.geojson"
+    try:
+        gdf = gpd.read_file(url)
+
+        # FORCE CRS TO EPSG:4326 (VERY IMPORTANT)
+        if gdf.crs is None or gdf.crs.to_epsg() != 4326:
+            gdf = gdf.to_crs("EPSG:4326")
+
+        polygon = gdf.unary_union
+        return polygon
+
+    except Exception as e:
+        st.error(f"Failed to load Delhi polygon: {e}")
+        return None
+
+# Load once into session_state
+if "delhi_polygon" not in st.session_state:
+    st.session_state["delhi_polygon"] = load_delhi_boundary_from_url()
 
 def get_user_geolocation():
     """
