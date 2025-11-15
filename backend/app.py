@@ -5,37 +5,38 @@ import requests
 import pydeck as pdk
 import plotly.express as px
 from datetime import datetime, timedelta
+# Assuming these functions exist in your krigging.py as per imports
 from krigging import perform_kriging_correct
 from krigging import get_aqi_at_location
 import geopandas as gpd
 from shapely.geometry import Point
 import pyproj
 from shapely.ops import transform
+import smtplib
+from email.message import EmailMessage
 
-def load_delhi_boundary_from_url():
-    url = "https://raw.githubusercontent.com/shuklaneerajdev/IndiaStateTopojsonFiles/master/Delhi.geojson"
-    try:
-        gdf = gpd.read_file(url)
+# ==========================
+# PAGE CONFIGURATION
+# ==========================
+st.set_page_config(
+    layout="wide",
+    page_title="Delhi Air Quality Dashboard",
+    page_icon="💨"
+)
 
-        # FORCE CRS TO EPSG:4326 (VERY IMPORTANT)
-        if gdf.crs is None or gdf.crs.to_epsg() != 4326:
-            gdf = gdf.to_crs("EPSG:4326")
+# ==========================
+# STATIC CONFIG
+# ==========================
+API_TOKEN = "97a0e712f47007556b57ab4b14843e72b416c0f9"
+DELHI_BOUNDS = "28.404,76.840,28.883,77.349"
+DELHI_LAT = 28.6139
+DELHI_LON = 77.2090
 
-        polygon = gdf.unary_union
-        return gdf, polygon
+DELHI_GEOJSON_URL = "https://raw.githubusercontent.com/shuklaneerajdev/IndiaStateTopojsonFiles/master/Delhi.geojson"
 
-    except Exception as e:
-        st.error(f"Failed to load Delhi polygon: {e}")
-        return None, None
-
-# Load once into session_state
-if "delhi_gdf" not in st.session_state or "delhi_polygon" not in st.session_state:
-    gdf, polygon = load_delhi_boundary_from_url()
-    st.session_state["delhi_gdf"] = gdf
-    st.session_state["delhi_polygon"] = polygon
-
-
-# Email to SMS Configuration (Gmail SMTP)
+# ==========================
+# EMAIL TO SMS CONFIGURATION
+# ==========================
 SENDER_EMAIL = "anumaliknr@gmail.com"  # Replace with your Gmail
 GMAIL_APP_PASSWORD = "xczo lasg vcek olqp"  # Replace with Gmail App Password
 
@@ -54,20 +55,8 @@ SMS_GATEWAYS = {
 def send_sms_via_email(phone_number, carrier_gateway, message, subject="AQI Alert"):
     """
     Send SMS using Email-to-SMS gateway via Gmail SMTP
-    
-    Args:
-        phone_number: Phone number without country code (e.g., "9876543210")
-        carrier_gateway: Email gateway suffix (e.g., "@airtelmail.com")
-        message: SMS message content
-        subject: Email subject (optional)
-    
-    Returns: 
-        success status and response message
     """
     try:
-        import smtplib
-        from email.message import EmailMessage
-        
         # Remove any non-digit characters from phone number
         phone_clean = ''.join(filter(str.isdigit, phone_number))
         
@@ -95,26 +84,6 @@ def send_sms_via_email(phone_number, carrier_gateway, message, subject="AQI Aler
         return False, f"SMTP error: {str(e)}"
     except Exception as e:
         return False, f"SMS sending failed: {str(e)}"
-
-
-# ==========================
-# PAGE CONFIGURATION
-# ==========================
-st.set_page_config(
-    layout="wide",
-    page_title="Delhi Air Quality Dashboard",
-    page_icon="💨"
-)
-
-# ==========================
-# STATIC CONFIG
-# ==========================
-API_TOKEN = "97a0e712f47007556b57ab4b14843e72b416c0f9"
-DELHI_BOUNDS = "28.404,76.840,28.883,77.349"
-DELHI_LAT = 28.6139
-DELHI_LON = 77.2090
-
-DELHI_GEOJSON_URL = "https://raw.githubusercontent.com/shuklaneerajdev/IndiaStateTopojsonFiles/master/Delhi.geojson"
 
 # ==========================
 # CUSTOM CSS FOR STYLING
@@ -324,6 +293,29 @@ st.markdown("""
 
 </style>
 """, unsafe_allow_html=True)
+
+
+@st.cache_data(show_spinner="Loading Delhi boundary...")
+def load_delhi_boundary_from_url():
+    try:
+        gdf = gpd.read_file(DELHI_GEOJSON_URL)
+
+        # FORCE CRS TO EPSG:4326 (VERY IMPORTANT)
+        if gdf.crs is None or gdf.crs.to_epsg() != 4326:
+            gdf = gdf.to_crs("EPSG:4326")
+
+        polygon = gdf.unary_union
+        return gdf, polygon
+
+    except Exception as e:
+        st.error(f"Failed to load Delhi polygon: {e}")
+        return None, None
+
+# Load once into session_state
+if "delhi_gdf" not in st.session_state or "delhi_polygon" not in st.session_state:
+    gdf, polygon = load_delhi_boundary_from_url()
+    st.session_state["delhi_gdf"] = gdf
+    st.session_state["delhi_polygon"] = polygon
 
 
 @st.cache_data(ttl=600, show_spinner="Fetching Air Quality Data...")
@@ -776,11 +768,21 @@ def render_alert_subscription_tab(df):
     st.markdown("---")
     st.markdown("### 📱 SMS Alert Configuration")
     
-    phone_number = st.text_input(
-        "Phone Number (with country code)", 
-        placeholder="+919876543210 or 919876543210",
-        help="Enter phone number with country code (e.g., +91 for India). The + sign is optional."
-    )
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        phone_number = st.text_input(
+            "Phone Number (with country code)", 
+            placeholder="+919876543210 or 919876543210",
+            help="Enter phone number with country code (e.g., +91 for India). The + sign is optional."
+        )
+        
+    with col2:
+        carrier_name = st.selectbox(
+            "Select Carrier (for Gateway)",
+            options=list(SMS_GATEWAYS.keys()),
+            help="Select your mobile carrier to route the SMS correctly."
+        )
 
     if st.button("🚀 Get AQI Alert via SMS", type="primary", use_container_width=True):
         if not phone_number:
@@ -832,6 +834,22 @@ Location: {user_lat:.4f}, {user_lon:.4f}
 
 Stay safe!
 """
+            # --- THIS LOGIC WAS MISSING IN YOUR ORIGINAL CODE ---
+            gateway = SMS_GATEWAYS[carrier_name]
+            
+            with st.spinner("Sending SMS via Email Gateway..."):
+                success, status_msg = send_sms_via_email(phone_number, gateway, message)
+                
+                if success:
+                    st.success(f"✅ {status_msg}")
+                    st.info("ℹ️ Note: SMS delivery depends on carrier gateway policies. It may appear as an email or text.")
+                else:
+                    st.error(f"❌ Failed: {status_msg}")
+                    
+        except Exception as e:
+            st.error(f"An unexpected error occurred: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
 
 
 def render_dummy_forecast_tab():
@@ -968,11 +986,12 @@ else:
         stations_gdf = gpd.GeoDataFrame(aqi_data_raw, crs="epsg:4326", geometry=geometry)
         
         # 3. Clip stations to keep only those INSIDE the Delhi polygon
-        aqi_data_filtered = gpd.clip(stations_gdf, delhi_polygon)
+        clipped_gdf = gpd.clip(stations_gdf, delhi_polygon)
         
         # Convert back to regular DataFrame to avoid geometry column issues
-        if not aqi_data_filtered.empty:
-            aqi_data_filtered = pd.DataFrame(aqi_data_filtered.drop(columns='geometry'))
+        if not clipped_gdf.empty:
+            # Drop the geometry column properly to make it a standard DataFrame again
+            aqi_data_filtered = pd.DataFrame(clipped_gdf.drop(columns='geometry'))
     
     if aqi_data_filtered.empty:
         st.warning("⚠️ **No monitoring stations found inside the Delhi boundary.** Showing all available data for the region.", icon="⚠️")
