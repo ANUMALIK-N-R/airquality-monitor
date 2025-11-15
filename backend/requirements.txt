@@ -6,3 +6,7 @@ plotly
 numpy
 Twilio
 tensorflow
+pykrige
+pyproj
+scikit-learn
+
