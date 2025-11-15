@@ -241,10 +241,23 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================
-# HELPER FUNCTIONS
-# ==========================
-
+@st.cache_data(show_spinner="Loading Delhi boundary...")
+def load_delhi_boundary_from_url():
+    """Loads and caches the Delhi boundary GeoJSON from a URL."""
+    try:
+        
+        gdf = gpd.read_file(DELHI_GEOJSON_URL)
+        
+       
+        gdf = gdf.to_crs(epsg=4326) 
+        
+        # Combine all geometries into one single polygon
+        delhi_polygon = gdf.unary_union 
+        return gdf, delhi_polygon
+    except Exception as e:
+        st.error(f"Error loading boundary from URL: {e}")
+        st.error(f"URL tried: {DELHI_GEOJSON_URL}")
+        return None, None
 
 @st.cache_data(ttl=600, show_spinner="Fetching Air Quality Data...")
 def fetch_live_data():
@@ -293,28 +306,6 @@ def fetch_live_data():
     except requests.RequestException:
         return pd.DataFrame()
 
-@st.cache_data(show_spinner="Loading Delhi boundary...")
-def load_delhi_boundary_from_url():
-    """Loads and caches the Delhi boundary GeoJSON from a URL."""
-    try:
-        
-        gdf = gpd.read_file(DELHI_GEOJSON_URL)
-        
-       
-        gdf = gdf.to_crs(epsg=4326) 
-        
-        # Combine all geometries into one single polygon
-        delhi_polygon = gdf.unary_union 
-        return gdf, delhi_polygon
-    except Exception as e:
-        st.error(f"Error loading boundary from URL: {e}")
-        st.error(f"URL tried: {DELHI_GEOJSON_URL}")
-        return None, None
-
-
-
-@st.cache_data(ttl=600, show_spinner="Fetching Air Quality Data...")
-def fetch_live_data():
     # ... (rest of your function) ...
 
 @st.cache_data(ttl=1800, show_spinner="Fetching Weather Data...")
