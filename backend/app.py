@@ -5,6 +5,8 @@ import requests
 import pydeck as pdk
 import plotly.express as px
 from datetime import datetime, timedelta
+from kriging import perform_kriging_correct
+
 
 # ==========================
 # PAGE CONFIGURATION
@@ -316,6 +318,43 @@ def get_aqi_category(aqi):
         return "Very Unhealthy", [147, 51, 234], "🟣", "Health alert: everyone may experience more serious health effects."
     else:
         return "Hazardous", [126, 34, 206], "☠️", "Health warnings of emergency conditions. The entire population is more likely to be affected."
+
+
+def render_kriging_tab(df):
+    st.markdown("### 🌡️ Interpolated AQI Heatmap (Kriging, UTM-corrected)")
+
+    if df.empty:
+        st.warning("No AQI stations available.")
+        return
+
+    delhi_bounds_tuple = (28.40, 28.88, 76.84, 77.35)
+
+    with st.spinner("Performing spatial interpolation..."):
+        lon_grid, lat_grid, z = perform_kriging_correct(df, delhi_bounds_tuple)
+
+    heatmap_df = pd.DataFrame({
+        "lon": lon_grid.flatten(),
+        "lat": lat_grid.flatten(),
+        "aqi": z.flatten()
+    })
+
+    fig = px.density_mapbox(
+        heatmap_df,
+        lat="lat",
+        lon="lon",
+        z="aqi",
+        radius=10,
+        center=dict(lat=28.6139, lon=77.2090),
+        zoom=9,
+        mapbox_style="carto-positron",
+        color_continuous_scale=[
+            "#009E60", "#FFD600", "#F97316",
+            "#DC2626", "#9333EA", "#7E22CE"
+        ]
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
 
 
 def get_weather_info(code):
@@ -813,8 +852,10 @@ render_header(aqi_data)
 if aqi_data.empty:
     st.error("⚠️ **Could not fetch live AQI data.** The API may be down or there's a network issue. Please try again later.", icon="🚨")
 else:
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["🗺️ Live Map", "🔔 Alerts & Health", "📊 Analytics", "📱 SMS Alerts", "📈 Forecast"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+        ["🗺️ Live Map", "🔔 Alerts & Health",
+         "📊 Analytics", "📱 SMS Alerts","📈 Forecast","🔥 Kriging Heatmap"])
+
     with tab1:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
@@ -840,3 +881,9 @@ else:
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
             render_dummy_forecast_tab()
             st.markdown('</div>', unsafe_allow_html=True)
+    with tab6:
+        with st.container():
+            st.markdown('<div class="content-card">', unsafe_allow_html=True)
+            render_kriging_tab(aqi_data)
+            st.markdown('</div>', unsafe_allow_html=True)
+
