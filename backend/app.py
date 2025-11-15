@@ -12,6 +12,77 @@ import pyproj
 from shapely.ops import transform
 
 
+def get_user_geolocation():
+    """
+    Gets user location using browser geolocation.
+    On the first run, JS runs and asks for location.
+    On reload, lat/lon appear in query params.
+    """
+    query = st.experimental_get_query_params()
+
+    if "lat" in query and "lon" in query:
+        try:
+            lat = float(query["lat"][0])
+            lon = float(query["lon"][0])
+            return lat, lon
+        except:
+            return None
+
+
+    # Ask browser for location (JavaScript)
+    st.markdown("""
+        <script>
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                const params = new URLSearchParams(window.location.search);
+                params.set("lat", lat);
+                params.set("lon", lon);
+                window.location.search = params.toString();
+            },
+            (err) => {
+                console.log("Geolocation blocked:", err);
+            }
+        );
+        </script>
+    """, unsafe_allow_html=True)
+
+    return None
+
+
+SMS77_API_KEY = "YOUR_SMS77_API_KEY"
+
+def send_sms_sms77(phone, text):
+    url = "https://gateway.sms77.io/api/sms"
+
+    payload = {
+        "to": phone,
+        "text": text,
+        "from": "AQIAlert",
+        "json": "1"
+    }
+
+    headers = {
+        "X-Api-Key": ce9196b9famsh41c38d8b9917c08p11f8e0jsnd367c1038fa7
+    }
+
+    r = requests.post(url, data=payload, headers=headers)
+    return r.json()
+
+
+def get_aqi_from_kriging_point(user_lon, user_lat, lon_grid, lat_grid, z_grid):
+    """
+    Returns interpolated AQI from the kriging grid at the user's exact location.
+    """
+    dist = (lon_grid - user_lon)**2 + (lat_grid - user_lat)**2
+    idx = np.unravel_index(np.argmin(dist), dist.shape)
+
+    value = z_grid[idx]
+    if np.isnan(value):
+        return None
+    return float(value)
+
 
 # ==========================
 # PAGE CONFIGURATION
@@ -468,22 +539,7 @@ def send_sms_alert(phone_number, message):
 
         # Send message
         sent_message = client.messages.create(
-            body=message,
-            from_=TWILIO_PHONE_NUMBER,
-            to=phone_number
-        )
-
-        return True, f"✅ Alert sent successfully! Message SID: {sent_message.sid}"
-    except ImportError:
-        return False, "❌ Twilio library not installed. Run: pip install twilio"
-    except Exception as e:
-        error_msg = str(e)
-        if "401" in error_msg or "authenticate" in error_msg.lower():
-            return False, f"🔐 Authentication Error: Your Twilio credentials are incorrect.\n\n✓ Check Account SID (starts with 'AC')\n✓ Check Auth Token (click eye icon 👁️ in console to reveal)\n✓ Make sure there are no extra spaces\n\nError details: {error_msg}"
-        elif "unverified" in error_msg.lower():
-            return False, f"📱 Phone Number Not Verified: For trial accounts, you must verify the recipient number in Twilio Console.\n\nGo to: https://console.twilio.com/us1/develop/phone-numbers/manage/verified\n\nError details: {error_msg}"
-        else:
-            return False, f"❌ Error sending SMS: {error_msg}"
+            
 
 
 def create_alert_message(nearby_stations, weather_data, location_name):
@@ -671,115 +727,104 @@ def render_alerts_tab(df):
 
 
 def render_alert_subscription_tab(df):
-    """Renders alert subscription form."""
-    st.markdown('<div class="section-header">📱 SMS Alert Subscription</div>',
-                unsafe_allow_html=True)
+    st.markdown('<div class="section-header">📱 SMS Alert Subscription</div>', unsafe_allow_html=True)
 
-    st.markdown("""
-    <div style="background-color: #E3F2FD; padding: 1rem; border-radius: 10px; border-left: 4px solid #2196F3; margin-bottom: 1.5rem;">
-        <p style="color: #0D47A1; margin: 0; font-weight: 500;">
-        📍 Get real-time air quality and weather alerts for your location via SMS. 
-        We'll find the nearest monitoring stations and send you personalized updates.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.info("Your location will be detected automatically. You can still edit it manually.", icon="📍")
 
+    # --- AUTO GPS DETECTION ---
+    geo = get_user_geolocation()
+    if geo:
+        auto_lat, auto_lon = geo
+    else:
+        auto_lat, auto_lon = 28.6139, 77.2090
+
+    # --- USER INPUT ---
     col1, col2 = st.columns(2)
 
     with col1:
         location_name = st.text_input(
             "📍 Your Location Name",
-            placeholder="e.g., Connaught Place, New Delhi",
-            help="Enter your area/locality name"
+            placeholder="Connaught Place, Delhi",
         )
 
         user_lat = st.number_input(
             "Latitude",
-            min_value=28.4,
-            max_value=28.9,
-            value=28.6139,
+            value=auto_lat,
             step=0.0001,
-            format="%.4f",
-            help="Your location's latitude"
+            format="%.6f"
         )
 
         user_lon = st.number_input(
             "Longitude",
-            min_value=76.8,
-            max_value=77.4,
-            value=77.2090,
+            value=auto_lon,
             step=0.0001,
-            format="%.4f",
-            help="Your location's longitude"
+            format="%.6f"
         )
 
     with col2:
         phone_number = st.text_input(
-            "📱 Phone Number",
-            placeholder="+91XXXXXXXXXX",
-            help="Enter with country code (e.g., +919876543210)"
+            "📱 Phone Number (SMS77.io)",
+            placeholder="+91XXXXXXXXXX"
         )
 
-        radius = st.slider(
-            "Search Radius (km)",
-            min_value=1,
-            max_value=20,
-            value=10,
-            help="Find stations within this radius"
-        )
+        radius = st.slider("Search Radius (km)", 1, 20, 10)
 
         st.markdown("<br>", unsafe_allow_html=True)
+        send_button = st.button("📤 Send Alert Now", use_container_width=True)
 
-        send_alert_btn = st.button(
-            "📤 Send Alert Now", type="primary", use_container_width=True)
+    # --- PROCESS ACTION ---
+    if send_button:
+        if not phone_number.startswith("+"):
+            st.error("Phone number must include country code. Example: +919876543210")
+            return
+        
+        if location_name.strip() == "":
+            st.error("Please enter your location name.")
+            return
 
-    if send_alert_btn:
-        if not location_name or not phone_number:
-            st.error(
-                "Please fill in all required fields: Location Name and Phone Number", icon="⚠️")
-        elif not phone_number.startswith('+'):
-            st.error(
-                "Phone number must include country code (e.g., +919876543210)", icon="⚠️")
-        else:
-            with st.spinner("Finding nearby stations and preparing alert..."):
-                # Get nearby stations
-                nearby_stations = get_nearby_stations(
-                    df, user_lat, user_lon, radius)
+        # --- Use KRIGING GRID instead of station data ---
+        st.info("Using interpolated AQI value from Kriging heatmap...")
 
-                if nearby_stations.empty:
-                    st.warning(
-                        f"No monitoring stations found within {radius} km of your location. Try increasing the search radius.", icon="⚠️")
-                else:
-                    # Get weather data
-                    weather_data = fetch_weather_data()
+        lon_grid, lat_grid, z_grid = st.session_state.get("kriging_result", (None,None,None))
 
-                    # Create alert message
-                    alert_message = create_alert_message(
-                        nearby_stations, weather_data, location_name)
+        if lon_grid is None:
+            st.error("Kriging has not been computed yet. Please visit the Kriging tab first.")
+            return
 
-                    # Display preview
-                    st.markdown("### 📄 Alert Preview")
-                    st.info(alert_message)
+        # Get AQI at user's exact location
+        aqi_value = get_aqi_from_kriging_point(
+            user_lon, user_lat, lon_grid, lat_grid, z_grid
+        )
 
-                    # Show nearby stations
-                    st.markdown("### 📍 Nearby Monitoring Stations")
-                    display_nearby = nearby_stations[[
-                        'station_name', 'aqi', 'category', 'distance']].head(5)
-                    display_nearby['distance'] = display_nearby['distance'].round(
-                        2).astype(str) + ' km'
-                    st.dataframe(display_nearby,
-                                 use_container_width=True, hide_index=True)
+        if aqi_value is None:
+            st.error("Your location falls outside the interpolation area.")
+            return
 
-                    # Send SMS
-                    success, message = send_sms_alert(
-                        phone_number, alert_message)
+        # Weather
+        weather = fetch_weather_data()
+        weather_desc, _ = get_weather_info(weather["current"]["weather_code"])
+        temp = weather["current"]["temperature_2m"]
 
-                    if success:
-                        st.success(message, icon="✅")
-                    else:
-                        st.error(message, icon="❌")
-                        st.info("💡 **Note:** To enable SMS alerts, you need to:\n1. Sign up for Twilio (free trial available)\n2. Get your Account SID, Auth Token, and Phone Number\n3. Update the configuration in the code\n4. Install Twilio: `pip install twilio`", icon="ℹ️")
+        # Create message
+        category, _, emoji, advice = get_aqi_category(aqi_value)
 
+        message = f"""
+📍 Air Quality Alert — {location_name}
+
+{emoji} AQI: {aqi_value:.0f} ({category})
+🌡️ Temp: {temp:.1f}°C
+🌤️ Weather: {weather_desc}
+
+💡 Advice: {advice}
+
+Stay safe!
+"""
+
+        # SEND SMS (SMS77.io)
+        api_response = send_sms_sms77(phone_number, message)
+
+        st.success("SMS sent successfully!")
+        st.json(api_response)
 
 def render_dummy_forecast_tab():
     """Render a dummy 24-hour AQI forecast using simulated data."""
