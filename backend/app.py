@@ -13,7 +13,7 @@ import pyproj
 from shapely.ops import transform
 
 def load_delhi_boundary_from_url():
-    url = "https://raw.githubusercontent.com/govindtomar/india-admin-boundaries/main/delhi_boundary.geojson"
+    url = "https://raw.githubusercontent.com/shuklaneerajdev/IndiaStateTopojsonFiles/master/Delhi.geojson"
     try:
         gdf = gpd.read_file(url)
 
