@@ -58,11 +58,27 @@ def mask_grid_with_polygon(lon_grid, lat_grid, polygon):
 # 4. Get Nearest Kriging Value (KD-Tree)
 # ---------------------------------------------------
 def get_nearest_kriging_value(user_lat, user_lon, lat_grid, lon_grid, z):
-    pts = np.column_stack((lat_grid.flatten(), lon_grid.flatten()))
+    """Get the nearest non-NaN kriging value for a given location."""
+    # Flatten and remove NaN values
+    flat_lat = lat_grid.flatten()
+    flat_lon = lon_grid.flatten()
+    flat_z = z.flatten()
+    
+    # Filter out NaN values
+    valid_mask = ~np.isnan(flat_z)
+    valid_lats = flat_lat[valid_mask]
+    valid_lons = flat_lon[valid_mask]
+    valid_z = flat_z[valid_mask]
+    
+    if len(valid_z) == 0:
+        return np.nan
+    
+    # Build KD-tree with valid points
+    pts = np.column_stack((valid_lats, valid_lons))
     tree = cKDTree(pts)
 
     _, idx = tree.query([user_lat, user_lon], k=1)
-    return z.flatten()[idx]
+    return valid_z[idx]
 
 
 # ---------------------------------------------------
@@ -107,9 +123,13 @@ def perform_kriging_correct(df, bounds, polygon, resolution=220):
     if len(df) < 3:
         raise ValueError("Not enough AQI stations for kriging interpolation.")
 
-    # Extract and clean values
-    values = df["aqi"].values
-    values = np.clip(values, 0, 500)  # remove outliers
+    # Extract and clean values - DON'T clip too aggressively
+    values = df["aqi"].values.copy()
+    
+    # Only remove extreme outliers (not normal low/high values)
+    values = np.clip(values, 0, 999)
+    
+    print(f"Station AQI range: {values.min():.1f} to {values.max():.1f}")
 
     # Convert station coordinates to UTM meters
     xs, ys = transformer_to_utm.transform(df["lon"].values, df["lat"].values)
@@ -119,21 +139,27 @@ def perform_kriging_correct(df, bounds, polygon, resolution=220):
         LAT_MIN, LAT_MAX, LON_MIN, LON_MAX, resolution
     )
 
-    # Run Ordinary Kriging (spherical = stable)
+    # Run Ordinary Kriging with better parameters
     OK = OrdinaryKriging(
         xs, ys, values,
         variogram_model="spherical",
         verbose=False,
-        enable_plotting=False
+        enable_plotting=False,
+        nlags=6  # Fewer lags for better local variation
     )
 
-    z, _ = OK.execute("grid", x_grid[0], y_grid[:, 0])
+    z, ss = OK.execute("grid", x_grid[0], y_grid[:, 0])
 
-    # Clip interpolated AQI
-    z = np.clip(z, 0, 500)
+    # Don't clip the interpolated values too aggressively
+    # Kriging should respect the input range
+    z = np.clip(z, max(0, values.min() - 50), values.max() + 50)
+    
+    print(f"Kriged AQI range (before smoothing): {np.nanmin(z):.1f} to {np.nanmax(z):.1f}")
 
-    # Optional smoothing (prevents blocky heatmap)
-    z = gaussian_filter(z, sigma=1)
+    # Light smoothing only (sigma=0.5 instead of 1)
+    z = gaussian_filter(z, sigma=0.5)
+    
+    print(f"Kriged AQI range (after smoothing): {np.nanmin(z):.1f} to {np.nanmax(z):.1f}")
 
     # Convert grid back to lat/lon
     lon_grid, lat_grid = transformer_to_latlon.transform(x_grid, y_grid)
