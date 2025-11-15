@@ -581,10 +581,15 @@ def render_header(df):
 
 def render_map_tab(df):
     """Renders the interactive map of AQI stations."""
-    st.markdown('<div class="section-header">📍 Interactive Air Quality Map</div>',
+    # The 'df' passed here is already filtered!
+    st.markdown('<div class="section-header">📍 Interactive Air Quality Map (Stations inside Delhi)</div>',
                 unsafe_allow_html=True)
 
-    # Add Legend
+    if df.empty:
+        st.warning("No monitoring stations found inside the Delhi boundary.")
+        return
+
+    # Add Legend (No changes here)
     st.markdown("""
     <div style="background-color: white; padding: 1rem; border-radius: 10px; border: 2px solid #BBDEFB; margin-bottom: 1rem;">
         <div style="font-weight: 700; color: #0D47A1; margin-bottom: 0.75rem; font-size: 1.1rem;">AQI Color Legend</div>
@@ -617,13 +622,14 @@ def render_map_tab(df):
     </div>
     """, unsafe_allow_html=True)
 
+    # Plot the FILTERED data
     st.pydeck_chart(pdk.Deck(
         map_style="light",
         initial_view_state=pdk.ViewState(
             latitude=DELHI_LAT, longitude=DELHI_LON, zoom=9.5, pitch=50),
         layers=[pdk.Layer(
             "ScatterplotLayer",
-            data=df,
+            data=df, # This 'df' is now the filtered one
             get_position='[lon, lat]',
             get_fill_color='color',
             get_radius=250,
@@ -636,8 +642,6 @@ def render_map_tab(df):
         tooltip={"html": "<b>{station_name}</b><br/>AQI: {aqi}<br/>Category: {category}<br/>Last Updated: {last_updated}",
                  "style": {"color": "white"}}
     ))
-
-
 def render_alerts_tab(df):
     """Renders health alerts and advice based on current AQI levels."""
     st.markdown('<div class="section-header">🔔 Health Alerts & Recommendations</div>',
