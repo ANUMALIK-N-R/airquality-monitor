@@ -25,7 +25,7 @@ DELHI_BOUNDS = "28.404,76.840,28.883,77.349"
 DELHI_LAT = 28.6139
 DELHI_LON = 77.2090
 
-DELHI_GEOJSON_URL = "https://raw.githubusercontent.com/udit-001/india-maps-data/master/geojson/delhi.geojson"
+DELHI_GEOJSON_URL = "https://raw.githubusercontent.com/shuklaneerajdev/IndiaStateTopojsonFiles/master/Delhi.geojson"
 
 # Twilio Configuration (you need to add your credentials)
 TWILIO_ACCOUNT_SID = "AC2cc57109fc63de336609901187eca69d"
