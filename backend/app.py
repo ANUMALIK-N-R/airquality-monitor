@@ -71,24 +71,26 @@ def get_user_geolocation():
     return None
 
 
-SMS77_API_KEY = "YOUR_SMS77_API_KEY"
+# set SMS77_API_KEY via st.secrets or environment
+# e.g. in deployment set st.secrets["SMS77_API_KEY"] = "your-key"
+SMS77_API_KEY = "ce9196b9famsh41c38d8b9917c08p11f8e0jsnd367c1038fa7"
 
 def send_sms_sms77(phone, text):
     url = "https://gateway.sms77.io/api/sms"
-
     payload = {
         "to": phone,
         "text": text,
         "from": "AQIAlert",
         "json": "1"
     }
-
     headers = {
-        "X-Api-Key": ce9196b9famsh41c38d8b9917c08p11f8e0jsnd367c1038fa7
+        "X-Api-Key": SMS77_API_KEY
     }
-
-    r = requests.post(url, data=payload, headers=headers)
-    return r.json()
+    r = requests.post(url, data=payload, headers=headers, timeout=10)
+    try:
+        return r.json()
+    except Exception:
+        return {"status": "error", "http_status": r.status_code, "text": r.text}
 
 
 # ==========================
@@ -328,19 +330,26 @@ st.markdown("""
 def load_delhi_boundary_from_url():
     """Loads and caches the Delhi boundary GeoJSON from a URL."""
     try:
-        
         gdf = gpd.read_file(DELHI_GEOJSON_URL)
-        
-       
-        gdf = gdf.to_crs(epsg=4326) 
-        
-        # Combine all geometries into one single polygon
-        delhi_polygon = gdf.unary_union 
+        # Ensure EPSG:4326
+        if gdf.crs is None:
+            gdf.set_crs(epsg=4326, inplace=True)
+        else:
+            gdf = gdf.to_crs(epsg=4326)
+
+        # Combine into a single polygon (unary_union)
+        delhi_polygon = gdf.unary_union
         return gdf, delhi_polygon
     except Exception as e:
         st.error(f"Error loading boundary from URL: {e}")
         st.error(f"URL tried: {DELHI_GEOJSON_URL}")
         return None, None
+    # Only initialize once and store both gdf and polygon
+    if "delhi_gdf" not in st.session_state or "delhi_polygon" not in st.session_state:
+        gdf, polygon = load_delhi_boundary_from_url()
+        st.session_state["delhi_gdf"] = gdf
+        st.session_state["delhi_polygon"] = polygon
+
 
 @st.cache_data(ttl=600, show_spinner="Fetching Air Quality Data...")
 def fetch_live_data():
@@ -440,8 +449,9 @@ def render_kriging_tab(df):
         )
 
     # ❗ SAVE THE RESULT FOR SMS TAB
-    st.session_state["kriging_result"] = (lon_grid, lat_grid, z)
+    st.session_state["kriging_output"] = (lon_grid, lat_grid, z)
     st.success("Kriging result stored successfully!")
+
 
     # Create Heatmap
     heatmap_df = pd.DataFrame({
@@ -671,8 +681,10 @@ def render_alert_subscription_tab(df):
     # Load latest kriging data from session
     kriging_data = st.session_state.get("kriging_output", None)
     if kriging_data is None:
-        st.error("Kriging data not available yet.")
+        st.error("Kriging data not available yet. Please run the Kriging Heatmap tab first.")
         return
+    lon_grid, lat_grid, z_grid = kriging_data
+
 
     lon_grid, lat_grid, z_grid = kriging_data
 
