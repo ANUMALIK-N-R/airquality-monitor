@@ -515,69 +515,6 @@ def get_nearby_stations(df, user_lat, user_lon, radius_km=10):
     return nearby
 
 
-def send_sms_alert(phone_number, message):
-    """Send SMS alert using Twilio."""
-    try:
-        from twilio.rest import Client
-
-        # Check if credentials are configured
-        if TWILIO_ACCOUNT_SID == "your_twilio_account_sid" or not TWILIO_ACCOUNT_SID.startswith("AC"):
-            return False, "⚠️ Twilio Account SID not configured correctly. It should start with 'AC' and be 34 characters long."
-
-        if TWILIO_AUTH_TOKEN == "your_twilio_auth_token" or len(TWILIO_AUTH_TOKEN) < 30:
-            return False, "⚠️ Twilio Auth Token not configured correctly. It should be 32 characters long."
-
-        if TWILIO_PHONE_NUMBER == "your_twilio_phone_number" or not TWILIO_PHONE_NUMBER.startswith("+"):
-            return False, "⚠️ Twilio Phone Number not configured correctly. It should start with '+' and include country code."
-
-        # Validate recipient phone number
-        if not phone_number.startswith("+"):
-            return False, "⚠️ Recipient phone number must include country code starting with '+'"
-
-        # Create Twilio client
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-
-        # Send message
-        sent_message = client.messages.create(
-            
-
-
-def create_alert_message(nearby_stations, weather_data, location_name):
-    """Create alert message with AQI and weather information."""
-    if nearby_stations.empty:
-        return "No nearby air quality monitoring stations found."
-
-    # Get average AQI and worst station
-    avg_aqi = nearby_stations['aqi'].mean()
-    worst_station = nearby_stations.iloc[0]
-
-    # Get weather info
-    weather_desc = "N/A"
-    temp = "N/A"
-    if weather_data and 'current' in weather_data:
-        current = weather_data['current']
-        weather_desc, _ = get_weather_info(current.get('weather_code', 0))
-        temp = f"{current['temperature_2m']:.1f}°C"
-
-    # Create message
-    category, _, emoji, advice = get_aqi_category(avg_aqi)
-
-    message = f"""🌍 Air Quality Alert - {location_name}
-
-{emoji} AQI Status: {category}
-📊 Average AQI: {avg_aqi:.0f}
-
-🔴 Worst Station: {worst_station['station_name']}
-AQI: {worst_station['aqi']:.0f} ({worst_station['distance']:.1f} km away)
-
-🌤️ Weather: {weather_desc}
-🌡️ Temperature: {temp}
-
-💡 Advice: {advice}
-
-Stay safe!"""
-
-    return message
 
 # ==========================
 # UI RENDERING FUNCTIONS
