@@ -338,12 +338,23 @@ def get_aqi_category(aqi):
 
 
 def render_kriging_tab(df):
-    st.markdown("### 🌡️ Interpolated AQI Heatmap (Kriging, Masked to Delhi)")
+
+    st.subheader("Spatial Interpolation (Kriging)")
+
+    delhi_bounds_tuple = (28.40, 28.88, 76.84, 77.35)
+
+    # Load polygon
     delhi_gdf, delhi_polygon = load_delhi_boundary_from_url()
 
-if delhi_gdf is None:
-    st.error("Delhi boundary could not be loaded.")
-    return
+    if delhi_gdf is None:
+        st.error("Delhi boundary could not be loaded.")
+        return   # ← THIS MUST BE INSIDE THE FUNCTION
+
+    with st.spinner("Performing spatial interpolation..."):
+        lon_grid, lat_grid, z = perform_kriging_correct(
+            df, delhi_bounds_tuple, polygon=delhi_polygon, resolution=200
+        )
+
 
     # Convert polygon to UTM
     project_to_utm = pyproj.Transformer.from_crs(
