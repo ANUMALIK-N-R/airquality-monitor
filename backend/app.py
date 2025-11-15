@@ -35,58 +35,64 @@ if "delhi_gdf" not in st.session_state or "delhi_polygon" not in st.session_stat
     st.session_state["delhi_polygon"] = polygon
 
 
-# Infobip SMS Configuration
-INFOBIP_API_KEY = "d03397e879c304ba449fbc368f348d5a-c69a8418-39f2-4466-8e59-72f0c86f77ae"
-INFOBIP_SENDER = "447491163443"
+# Email to SMS Configuration (Gmail SMTP)
+SENDER_EMAIL = "anumaliknr@gmail.com"  # Replace with your Gmail
+GMAIL_APP_PASSWORD = "xczo lasg vcek olqp"  # Replace with Gmail App Password
 
-def send_sms_via_infobip(phone, message):
+# SMS Gateway mapping for different carriers
+SMS_GATEWAYS = {
+    "Airtel": "@airtelmail.com",
+    "Jio": "@jionet.com", 
+    "Vi (Vodafone Idea)": "@myvi.in",
+    "BSNL": "@bsnlmail.com",
+    "AT&T (USA)": "@txt.att.net",
+    "T-Mobile (USA)": "@tmomail.net",
+    "Verizon (USA)": "@vtext.com",
+    "Sprint (USA)": "@messaging.sprintpcs.com"
+}
+
+def send_sms_via_email(phone_number, carrier_gateway, message, subject="AQI Alert"):
     """
-    Send SMS using Infobip API
-    Returns: success status and response message
+    Send SMS using Email-to-SMS gateway via Gmail SMTP
+    
+    Args:
+        phone_number: Phone number without country code (e.g., "9876543210")
+        carrier_gateway: Email gateway suffix (e.g., "@airtelmail.com")
+        message: SMS message content
+        subject: Email subject (optional)
+    
+    Returns: 
+        success status and response message
     """
     try:
-        import http.client
-        import json
+        import smtplib
+        from email.message import EmailMessage
         
-        # Remove + from phone number if present
-        phone_clean = phone.replace("+", "").replace("-", "").replace(" ", "")
+        # Remove any non-digit characters from phone number
+        phone_clean = ''.join(filter(str.isdigit, phone_number))
         
-        conn = http.client.HTTPSConnection("api.infobip.com")
+        # Create SMS gateway address
+        gateway_address = f"{phone_clean}{carrier_gateway}"
         
-        payload = json.dumps({
-            "messages": [
-                {
-                    "destinations": [{"to": phone_clean}],
-                    "from": INFOBIP_SENDER,
-                    "text": message
-                }
-            ]
-        })
+        # Create email message
+        msg = EmailMessage()
+        msg.set_content(message)
+        msg["From"] = SENDER_EMAIL
+        msg["To"] = gateway_address
+        msg["Subject"] = subject
         
-        headers = {
-            'Authorization': f'App {INFOBIP_API_KEY}',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        }
+        # Send via Gmail SMTP
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(SENDER_EMAIL, GMAIL_APP_PASSWORD)
+            server.send_message(msg)
         
-        conn.request("POST", "/sms/2/text/advanced", payload, headers)
-        res = conn.getresponse()
-        data = res.read()
+        return True, f"SMS sent successfully to {phone_clean} via {carrier_gateway}"
         
-        response_data = json.loads(data.decode("utf-8"))
-        
-        # Check if SMS was sent successfully
-        if response_data.get("messages") and len(response_data["messages"]) > 0:
-            status = response_data["messages"][0].get("status", {})
-            if status.get("groupName") == "PENDING":
-                return True, "SMS sent successfully and pending delivery"
-            elif status.get("groupName") == "DELIVERED":
-                return True, "SMS delivered successfully"
-            else:
-                return False, f"SMS status: {status.get('description', 'Unknown')}"
-        else:
-            return False, "Failed to send SMS - no response from server"
-            
+    except smtplib.SMTPAuthenticationError:
+        return False, "Email authentication failed. Please check your Gmail credentials and ensure 'App Password' is enabled."
+    except smtplib.SMTPException as e:
+        return False, f"SMTP error: {str(e)}"
     except Exception as e:
         return False, f"SMS sending failed: {str(e)}"
 
