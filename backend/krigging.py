@@ -123,13 +123,10 @@ def perform_kriging_correct(df, bounds, polygon, resolution=220):
     if len(df) < 3:
         raise ValueError("Not enough AQI stations for kriging interpolation.")
 
-    # Extract and clean values - DON'T clip too aggressively
+    # Extract values - keep original range
     values = df["aqi"].values.copy()
     
-    # Only remove extreme outliers (not normal low/high values)
-    values = np.clip(values, 0, 999)
-    
-    print(f"Station AQI range: {values.min():.1f} to {values.max():.1f}")
+    print(f"[DEBUG] Station AQI range: {values.min():.1f} to {values.max():.1f}")
 
     # Convert station coordinates to UTM meters
     xs, ys = transformer_to_utm.transform(df["lon"].values, df["lat"].values)
@@ -139,27 +136,37 @@ def perform_kriging_correct(df, bounds, polygon, resolution=220):
         LAT_MIN, LAT_MAX, LON_MIN, LON_MAX, resolution
     )
 
-    # Run Ordinary Kriging with better parameters
-    OK = OrdinaryKriging(
-        xs, ys, values,
-        variogram_model="spherical",
-        verbose=False,
-        enable_plotting=False,
-        nlags=6  # Fewer lags for better local variation
-    )
+    # Run Ordinary Kriging with linear model for better range preservation
+    try:
+        OK = OrdinaryKriging(
+            xs, ys, values,
+            variogram_model="linear",  # Changed from spherical to linear
+            verbose=False,
+            enable_plotting=False,
+            exact_values=True  # Force exact values at station locations
+        )
 
-    z, ss = OK.execute("grid", x_grid[0], y_grid[:, 0])
+        z, ss = OK.execute("grid", x_grid[0], y_grid[:, 0])
+        
+    except Exception as e:
+        print(f"[WARNING] Linear model failed, trying spherical: {e}")
+        OK = OrdinaryKriging(
+            xs, ys, values,
+            variogram_model="spherical",
+            verbose=False,
+            enable_plotting=False
+        )
+        z, ss = OK.execute("grid", x_grid[0], y_grid[:, 0])
 
-    # Don't clip the interpolated values too aggressively
-    # Kriging should respect the input range
-    z = np.clip(z, max(0, values.min() - 50), values.max() + 50)
+    print(f"[DEBUG] Raw kriging output range: {np.nanmin(z):.1f} to {np.nanmax(z):.1f}")
+
+    # NO aggressive clipping - only remove impossible values
+    z = np.clip(z, 0, 999)
     
-    print(f"Kriged AQI range (before smoothing): {np.nanmin(z):.1f} to {np.nanmax(z):.1f}")
-
-    # Light smoothing only (sigma=0.5 instead of 1)
-    z = gaussian_filter(z, sigma=0.5)
+    # NO smoothing to preserve actual station values
+    # z = gaussian_filter(z, sigma=0.5)  # REMOVED
     
-    print(f"Kriged AQI range (after smoothing): {np.nanmin(z):.1f} to {np.nanmax(z):.1f}")
+    print(f"[DEBUG] Final kriging range: {np.nanmin(z):.1f} to {np.nanmax(z):.1f}")
 
     # Convert grid back to lat/lon
     lon_grid, lat_grid = transformer_to_latlon.transform(x_grid, y_grid)
