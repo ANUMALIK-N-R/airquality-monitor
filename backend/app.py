@@ -36,25 +36,33 @@ if "delhi_gdf" not in st.session_state or "delhi_polygon" not in st.session_stat
 
 
 # set SMS77_API_KEY via st.secrets or environment
-# e.g. in deployment set st.secrets["SMS77_API_KEY"] = "your-key"
 SMS77_API_KEY = "ce9196b9famsh41c38d8b9917c08p11f8e0jsnd367c1038fa7"
 
-def send_sms_sms77(phone, text):
-    url = "https://gateway.sms77.io/api/sms"
-    payload = {
-        "to": phone,
-        "text": text,
-        "from": "AQIAlert",
-        "json": "1"
-    }
-    headers = {
-        "X-Api-Key": SMS77_API_KEY
-    }
-    r = requests.post(url, data=payload, headers=headers, timeout=10)
+def send_sms_via_sms77(phone, message):
+    """
+    Send SMS using SMS77 API
+    Returns: success status and response message
+    """
     try:
-        return r.json()
-    except Exception:
-        return {"status": "error", "http_status": r.status_code, "text": r.text}
+        url = "https://gateway.sms77.io/api/sms"
+        params = {
+            "to": phone,
+            "text": message,
+            "from": "AQIAlert"
+        }
+        headers = {
+            "X-Api-Key": SMS77_API_KEY
+        }
+        
+        response = requests.post(url, data=params, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            return True, "SMS sent successfully"
+        else:
+            return False, f"SMS service returned status code: {response.status_code}"
+            
+    except Exception as e:
+        return False, f"SMS sending failed: {str(e)}"
 
 
 # ==========================
