@@ -1,70 +1,60 @@
-import numpy as np
-import pandas as pd
-from pyproj import Transformer
-from pykrige.ok import OrdinaryKriging
-
-# -----------------------------
-# 1. UTM Transformer for Delhi
-# -----------------------------
-
-# Delhi is in UTM Zone 43N  (for Shanghai we’d use 51N — I can adjust)
-transformer_to_utm = Transformer.from_crs("epsg:4326", "epsg:32643", always_xy=True)
-transformer_to_latlon = Transformer.from_crs("epsg:32643", "epsg:4326", always_xy=True)
-
-# -----------------------------------------------
-# 2. Grid generator in UTM meters (NOT lat/lon!)
-# -----------------------------------------------
-
-def generate_utm_grid(lat_min, lat_max, lon_min, lon_max, resolution=200):
-    """
-    Generate a grid in UTM coordinates for Kriging.
-    """
-    # Convert bounding box corners to UTM meters
-    x_min, y_min = transformer_to_utm.transform(lon_min, lat_min)
-    x_max, y_max = transformer_to_utm.transform(lon_max, lat_max)
-
-    # Create evenly spaced meter grid
-    x = np.linspace(x_min, x_max, resolution)
-    y = np.linspace(y_min, y_max, resolution)
-    x_grid, y_grid = np.meshgrid(x, y)
-
-    return x_grid, y_grid
-
-
-# -----------------------------------------------
-# 3. Kriging with UTM coordinates (CORRECT WAY)
-# -----------------------------------------------
-
 def perform_kriging_correct(df, bounds, resolution=200):
     """
-    df: DataFrame from your fetch_live_data()
-        must contain: lat, lon, aqi
+    Performs UTM-corrected kriging with full safety checks.
+    df must contain: lat, lon, aqi
     bounds: (LAT_MIN, LAT_MAX, LON_MIN, LON_MAX)
     """
 
+    # -----------------------------
+    # SAFETY CHECKS BEFORE KRIGING
+    # -----------------------------
+
+    # Remove NaN values
+    df = df.dropna(subset=["lat", "lon", "aqi"]).copy()
+
+    # Remove duplicates (PyKrige will crash on duplicate coords)
+    df = df.drop_duplicates(subset=["lat", "lon"]).reset_index(drop=True)
+
+    # Ensure AQI is numeric
+    df["aqi"] = pd.to_numeric(df["aqi"], errors="coerce")
+    df = df.dropna(subset=["aqi"])
+
+    # Must have AT LEAST 4 stations for kriging
+    if len(df) < 4:
+        raise ValueError(f"Kriging requires at least 4 AQI stations. Found: {len(df)}")
+
+    # Must have variance > 0 (PyKrige crashes if all AQIs are identical)
+    if df["aqi"].nunique() < 2:
+        raise ValueError("AQI values have zero variance — cannot perform kriging.")
+
+    # Now extract values
     LAT_MIN, LAT_MAX, LON_MIN, LON_MAX = bounds
 
     # Convert station coords to UTM
     xs, ys = transformer_to_utm.transform(df["lon"].values, df["lat"].values)
-    values = df["aqi"].values
+    values = df["aqi"].values.astype(float)
 
-    # Generate UTM grid
+    # -----------------------------
+    # GENERATE UTM GRID
+    # -----------------------------
     x_grid, y_grid = generate_utm_grid(
         LAT_MIN, LAT_MAX, LON_MIN, LON_MAX, resolution=resolution
     )
 
-    # Kriging (auto-select best variogram)
+    # -----------------------------
+    # PERFORM SAFE KRIGING
+    # -----------------------------
     OK = OrdinaryKriging(
         xs, ys, values,
-        variogram_model="best",
+        variogram_model="best",    # auto-fit the correct model
         enable_plotting=False,
         verbose=False
     )
 
-    # Interpolate
+    # Perform interpolation
     z, ss = OK.execute("grid", x_grid[0], y_grid[:, 0])
 
-    # Clip output (AQI must be 0–500)
+    # Clip AQI values to realistic range
     z = np.clip(z, 0, 500)
 
     # Convert grid back to lat/lon for plotting
