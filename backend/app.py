@@ -35,31 +35,57 @@ if "delhi_gdf" not in st.session_state or "delhi_polygon" not in st.session_stat
     st.session_state["delhi_polygon"] = polygon
 
 
-# set SMS77_API_KEY via st.secrets or environment
-SMS77_API_KEY = "ce9196b9famsh41c38d8b9917c08p11f8e0jsnd367c1038fa7"
+# Infobip SMS Configuration
+INFOBIP_API_KEY = "d03397e879c304ba449fbc368f348d5a-c69a8418-39f2-4466-8e59-72f0c86f77ae"
+INFOBIP_SENDER = "447491163443"
 
-def send_sms_via_sms77(phone, message):
+def send_sms_via_infobip(phone, message):
     """
-    Send SMS using SMS77 API
+    Send SMS using Infobip API
     Returns: success status and response message
     """
     try:
-        url = "https://gateway.sms77.io/api/sms"
-        params = {
-            "to": phone,
-            "text": message,
-            "from": "AQIAlert"
-        }
+        import http.client
+        import json
+        
+        # Remove + from phone number if present
+        phone_clean = phone.replace("+", "").replace("-", "").replace(" ", "")
+        
+        conn = http.client.HTTPSConnection("api.infobip.com")
+        
+        payload = json.dumps({
+            "messages": [
+                {
+                    "destinations": [{"to": phone_clean}],
+                    "from": INFOBIP_SENDER,
+                    "text": message
+                }
+            ]
+        })
+        
         headers = {
-            "X-Api-Key": SMS77_API_KEY
+            'Authorization': f'App {INFOBIP_API_KEY}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
         }
         
-        response = requests.post(url, data=params, headers=headers, timeout=10)
+        conn.request("POST", "/sms/2/text/advanced", payload, headers)
+        res = conn.getresponse()
+        data = res.read()
         
-        if response.status_code == 200:
-            return True, "SMS sent successfully"
+        response_data = json.loads(data.decode("utf-8"))
+        
+        # Check if SMS was sent successfully
+        if response_data.get("messages") and len(response_data["messages"]) > 0:
+            status = response_data["messages"][0].get("status", {})
+            if status.get("groupName") == "PENDING":
+                return True, "SMS sent successfully and pending delivery"
+            elif status.get("groupName") == "DELIVERED":
+                return True, "SMS delivered successfully"
+            else:
+                return False, f"SMS status: {status.get('description', 'Unknown')}"
         else:
-            return False, f"SMS service returned status code: {response.status_code}"
+            return False, "Failed to send SMS - no response from server"
             
     except Exception as e:
         return False, f"SMS sending failed: {str(e)}"
@@ -83,11 +109,6 @@ DELHI_LAT = 28.6139
 DELHI_LON = 77.2090
 
 DELHI_GEOJSON_URL = "https://raw.githubusercontent.com/shuklaneerajdev/IndiaStateTopojsonFiles/master/Delhi.geojson"
-
-# Twilio Configuration (you need to add your credentials)
-TWILIO_ACCOUNT_SID = "AC2cc57109fc63de336609901187eca69d"
-TWILIO_AUTH_TOKEN = "62b791789bb490f91879e89fa2ed959d"
-TWILIO_PHONE_NUMBER = "+13856005348"
 
 # ==========================
 # CUSTOM CSS FOR STYLING
@@ -747,15 +768,15 @@ def render_alert_subscription_tab(df):
                 st.warning("⚠️ Could not parse GPS coordinates")
 
     st.markdown("---")
-    st.markdown("### 📱 SMS Configuration")
+    st.markdown("### 📱 SMS Alert Configuration")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        phone_number = st.text_input("Phone Number (with country code)", placeholder="+919876543210")
-    with col2:
-        sms_service = st.selectbox("SMS Service", ["SMS77", "Twilio (Coming Soon)"], disabled=True)
+    phone_number = st.text_input(
+        "Phone Number (with country code)", 
+        placeholder="+919876543210 or 919876543210",
+        help="Enter phone number with country code (e.g., +91 for India). The + sign is optional."
+    )
 
-    if st.button("🚀 Get AQI Alert", type="primary", use_container_width=True):
+    if st.button("🚀 Get AQI Alert via SMS", type="primary", use_container_width=True):
         if not phone_number:
             st.warning("⚠️ Please enter a phone number!")
             return
@@ -806,28 +827,14 @@ Location: {user_lat:.4f}, {user_lon:.4f}
 Stay safe!
 """
 
-            # Send SMS using simple requests
-            try:
-                import requests
-                url = "https://gateway.sms77.io/api/sms"
-                params = {
-                    "to": phone_number,
-                    "text": message,
-                    "from": "AQIAlert"
-                }
-                headers = {
-                    "X-Api-Key": SMS77_API_KEY
-                }
-                response = requests.post(url, data=params, headers=headers, timeout=10)
-                
-                if response.status_code == 200:
-                    st.success("✅ SMS sent successfully!")
-                else:
-                    st.warning(f"⚠️ SMS service returned status code: {response.status_code}")
-                    
-            except Exception as sms_error:
-                st.warning(f"⚠️ SMS sending failed: {str(sms_error)}")
-                st.info("💡 Alert information shown below instead:")
+            # Send SMS using Infobip
+            success, sms_message = send_sms_via_infobip(phone_number, message)
+            
+            if success:
+                st.success(f"✅ {sms_message}")
+            else:
+                st.warning(f"⚠️ {sms_message}")
+                st.info("💡 Alert information shown below instead")
             
             # Display AQI info visually regardless of SMS status
             st.markdown(f"""
