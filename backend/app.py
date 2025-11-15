@@ -327,10 +327,25 @@ def render_kriging_tab(df):
         st.warning("No AQI stations available.")
         return
 
+    # 🚨 NEW SAFETY RULES
+    if df["aqi"].nunique() < 2:
+        st.error("Kriging cannot run because all AQI values are identical.")
+        return
+
+    if len(df) < 4:
+        st.error("Not enough AQI stations available for kriging (need ≥ 4).")
+        return
+
+    if df[['lat','lon']].duplicated().any():
+        st.error("Duplicate station coordinates found — kriging cannot proceed.")
+        return
+
+    # Continue only if all safe
     delhi_bounds_tuple = (28.40, 28.88, 76.84, 77.35)
 
     with st.spinner("Performing spatial interpolation..."):
         lon_grid, lat_grid, z = perform_kriging_correct(df, delhi_bounds_tuple)
+
 
     heatmap_df = pd.DataFrame({
         "lon": lon_grid.flatten(),
