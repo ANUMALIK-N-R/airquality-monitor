@@ -7,6 +7,7 @@ import plotly.express as px
 from datetime import datetime, timedelta
 from krigging import perform_kriging_correct
 import geopandas as gpd
+from shapely.geometry import Point
 import pyproj
 from shapely.ops import transform
 
@@ -890,12 +891,39 @@ def render_analytics_tab(df):
 # ==========================
 # MAIN APP EXECUTION
 # ==========================
-aqi_data = fetch_live_data()
-render_header(aqi_data)
+aqi_data_raw = fetch_live_data()
 
-if aqi_data.empty:
+if aqi_data_raw.empty:
     st.error("⚠️ **Could not fetch live AQI data.** The API may be down or there's a network issue. Please try again later.", icon="🚨")
+    # Render header with empty data to avoid crashing
+    render_header(aqi_data_raw) 
 else:
+    # --- START OF NEW LOGIC ---
+    # 1. Load the Delhi boundary
+    delhi_gdf, delhi_polygon = load_delhi_boundary_from_url()
+    
+    aqi_data_filtered = pd.DataFrame() # Create an empty df
+    
+    if delhi_gdf is not None:
+        # 2. Convert raw station data to a GeoDataFrame
+        geometry = [Point(xy) for xy in zip(aqi_data_raw['lon'], aqi_data_raw['lat'])]
+        stations_gdf = gpd.GeoDataFrame(aqi_data_raw, crs="epsg:4326", geometry=geometry)
+        
+        # 3. Clip stations to keep only those INSIDE the Delhi polygon
+        aqi_data_filtered = gpd.clip(stations_gdf, delhi_polygon)
+    
+    if aqi_data_filtered.empty:
+        st.error("⚠️ **No monitoring stations found *inside* the Delhi boundary.** Showing raw data for the region.", icon="🚨")
+        # Fallback to raw data if filtering fails or finds nothing
+        aqi_data_to_display = aqi_data_raw
+    else:
+        st.success(f"✅ Loaded {len(aqi_data_filtered)} monitoring stations inside the Delhi boundary.", icon="🛰️")
+        aqi_data_to_display = aqi_data_filtered
+    # --- END OF NEW LOGIC ---
+
+    # 4. Render all components using the (now filtered) data
+    render_header(aqi_data_to_display)
+
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
         ["🗺️ Live Map", "🔔 Alerts & Health",
          "📊 Analytics", "📱 SMS Alerts","📈 Forecast","🔥 Kriging Heatmap"])
@@ -903,22 +931,26 @@ else:
     with tab1:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            render_map_tab(aqi_data)
+            # Pass the filtered data
+            render_map_tab(aqi_data_to_display) 
             st.markdown('</div>', unsafe_allow_html=True)
     with tab2:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            render_alerts_tab(aqi_data)
+            # Pass the filtered data
+            render_alerts_tab(aqi_data_to_display)
             st.markdown('</div>', unsafe_allow_html=True)
     with tab3:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            render_analytics_tab(aqi_data)
+            # Pass the filtered data
+            render_analytics_tab(aqi_data_to_display)
             st.markdown('</div>', unsafe_allow_html=True)
     with tab4:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            render_alert_subscription_tab(aqi_data)
+            # Pass the filtered data (for nearby calculations)
+            render_alert_subscription_tab(aqi_data_to_display)
             st.markdown('</div>', unsafe_allow_html=True)
     with tab5:
         with st.container():
@@ -928,6 +960,7 @@ else:
     with tab6:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            render_kriging_tab(aqi_data)
+            # Pass the filtered data
+            render_kriging_tab(aqi_data_to_display) 
             st.markdown('</div>', unsafe_allow_html=True)
 
