@@ -85,11 +85,12 @@ def perform_kriging_correct(df, bounds, resolution=200):
     # RUN ORDINARY KRIGING
     # -----------------------------
     OK = OrdinaryKriging(
-        xs, ys, values,
-        variogram_model="best",
-        enable_plotting=False,
-        verbose=False,
+    xs, ys, values,
+    variogram_model="exponential",
+    enable_plotting=False,
+    verbose=False
     )
+
 
     # Interpolate on grid
     z, ss = OK.execute("grid", x_grid[0], y_grid[:, 0])
