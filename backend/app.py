@@ -383,29 +383,6 @@ def render_kriging_tab(df):
         st.error("Not enough AQI stations within Delhi boundary for kriging interpolation (minimum 3 required).")
         return
 
-    # Show station info with actual data range
-    st.info(f"📊 Using {len(df)} monitoring stations within Delhi boundary for interpolation.")
-    
-    st.markdown("### 📍 Station Data Summary")
-    
-    # Display station statistics
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Stations", len(df))
-    with col2:
-        min_station = df.loc[df['aqi'].idxmin(), 'station_name']
-        st.metric("Min AQI", f"{df['aqi'].min():.0f}", delta=f"at {min_station}")
-    with col3:
-        max_station = df.loc[df['aqi'].idxmax(), 'station_name']
-        st.metric("Max AQI", f"{df['aqi'].max():.0f}", delta=f"at {max_station}")
-    with col4:
-        st.metric("Avg AQI", f"{df['aqi'].mean():.0f}")
-    
-    # Show actual station values for reference
-    with st.expander("🔍 View All Station Values"):
-        station_display = df[['station_name', 'aqi', 'lat', 'lon']].sort_values('aqi')
-        st.dataframe(station_display, use_container_width=True, hide_index=True)
-
     with st.spinner("Performing spatial interpolation..."):
         try:
             lon_grid, lat_grid, z = perform_kriging_correct(
@@ -417,7 +394,7 @@ def render_kriging_tab(df):
 
             # ❗ SAVE THE RESULT FOR SMS TAB
             st.session_state["kriging_output"] = (lon_grid, lat_grid, z)
-            st.success("✅ Kriging result stored successfully!")
+            st.success("✅ Kriging interpolation completed successfully!")
 
             # Create Heatmap with better visualization
             heatmap_df = pd.DataFrame({
@@ -442,7 +419,7 @@ def render_kriging_tab(df):
                     "#009E60", "#FFD600", "#F97316",
                     "#DC2626", "#9333EA", "#7E22CE"
                 ],
-                range_color=[0, 300],  # Set color range
+                range_color=[0, 400],  # Set color range
                 title="Interpolated AQI Heatmap across Delhi"
             )
             
@@ -458,16 +435,6 @@ def render_kriging_tab(df):
             )
 
             st.plotly_chart(fig, use_container_width=True)
-            
-            # Show interpolation statistics
-            st.markdown("### 📈 Interpolation Statistics")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Grid Points", f"{len(heatmap_df):,}")
-            with col2:
-                st.metric("Min Interpolated AQI", f"{heatmap_df['aqi'].min():.1f}")
-            with col3:
-                st.metric("Max Interpolated AQI", f"{heatmap_df['aqi'].max():.1f}")
         
         except Exception as e:
             st.error(f"Error performing kriging: {str(e)}")
@@ -677,25 +644,116 @@ def render_alert_subscription_tab(df):
     
     lon_grid, lat_grid, z_grid = kriging_data
 
-    st.markdown("### 📍 Enter Your Location")
-    st.info("💡 Provide your coordinates to get AQI information from our kriging model (interpolated data across Delhi).")
+    st.markdown("### 📍 Select Your Location")
+    
+    # Location method selection
+    location_method = st.radio(
+        "Choose how to provide your location:",
+        ["🗺️ Select from Map/Dropdown", "✍️ Enter Coordinates Manually", "📡 Use Device GPS"],
+        horizontal=True
+    )
+    
+    user_lat = None
+    user_lon = None
+    
+    if location_method == "🗺️ Select from Map/Dropdown":
+        st.info("💡 Select a popular location in Delhi or choose from monitoring stations")
+        
+        # Popular Delhi locations
+        popular_locations = {
+            "Connaught Place": (28.6315, 77.2167),
+            "India Gate": (28.6129, 77.2295),
+            "Red Fort": (28.6562, 77.2410),
+            "Qutub Minar": (28.5244, 77.1855),
+            "Lotus Temple": (28.5535, 77.2588),
+            "Chandni Chowk": (28.6506, 77.2303),
+            "Karol Bagh": (28.6519, 77.1906),
+            "Dwarka": (28.5921, 77.0460),
+            "Rohini": (28.7496, 77.0670),
+            "Nehru Place": (28.5494, 77.2501)
+        }
+        
+        # Add monitoring stations to dropdown
+        station_locations = {}
+        for _, row in df.iterrows():
+            station_locations[f"📍 {row['station_name']} (AQI: {row['aqi']:.0f})"] = (row['lat'], row['lon'])
+        
+        all_locations = {**popular_locations, **station_locations}
+        
+        selected_location = st.selectbox(
+            "Select Location:",
+            options=list(all_locations.keys())
+        )
+        
+        user_lat, user_lon = all_locations[selected_location]
+        st.success(f"✅ Selected: {selected_location} ({user_lat:.4f}, {user_lon:.4f})")
+        
+    elif location_method == "✍️ Enter Coordinates Manually":
+        st.info("💡 Enter latitude and longitude coordinates")
+        col1, col2 = st.columns(2)
+        with col1:
+            user_lat = st.number_input("Latitude", format="%.6f", step=0.000001, value=28.6139)
+        with col2:
+            user_lon = st.number_input("Longitude", format="%.6f", step=0.000001, value=77.2090)
+            
+    else:  # Device GPS
+        st.info("📡 Click the button below to request your device location")
+        
+        # JavaScript to get geolocation
+        location_component = st.empty()
+        
+        if st.button("📍 Get My Location", key="gps_button"):
+            st.markdown("""
+                <script>
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        function(position) {
+                            const lat = position.coords.latitude;
+                            const lon = position.coords.longitude;
+                            
+                            // Store in session storage
+                            sessionStorage.setItem('user_lat', lat);
+                            sessionStorage.setItem('user_lon', lon);
+                            
+                            // Reload page to update
+                            window.location.reload();
+                        },
+                        function(error) {
+                            alert('Error getting location: ' + error.message);
+                        }
+                    );
+                } else {
+                    alert('Geolocation is not supported by your browser');
+                }
+                </script>
+            """, unsafe_allow_html=True)
+        
+        # Try to read from query params (after reload)
+        query_params = st.experimental_get_query_params()
+        if 'lat' in query_params and 'lon' in query_params:
+            try:
+                user_lat = float(query_params['lat'][0])
+                user_lon = float(query_params['lon'][0])
+                st.success(f"✅ GPS Location: {user_lat:.4f}, {user_lon:.4f}")
+            except:
+                st.warning("⚠️ Could not parse GPS coordinates")
 
+    st.markdown("---")
+    st.markdown("### 📱 SMS Configuration")
+    
     col1, col2 = st.columns(2)
     with col1:
-        user_lat = st.number_input("Latitude", format="%.6f", step=0.000001, value=28.6139)
+        phone_number = st.text_input("Phone Number (with country code)", placeholder="+919876543210")
     with col2:
-        user_lon = st.number_input("Longitude", format="%.6f", step=0.000001, value=77.2090)
+        sms_service = st.selectbox("SMS Service", ["SMS77", "Twilio (Coming Soon)"], disabled=True)
 
-    st.markdown("### 📱 SMS Phone Number")
-    phone_number = st.text_input("Enter phone number with country code", placeholder="+91XXXXXXXXXX")
-
-    if st.button("🚀 Send AQI Alert SMS"):
+    if st.button("🚀 Get AQI Alert", type="primary", use_container_width=True):
         if not phone_number:
             st.warning("⚠️ Please enter a phone number!")
             return
 
-        if user_lat == 0.0 or user_lon == 0.0:
-            st.warning("⚠️ Please enter valid coordinates!")
+        if user_lat is None or user_lon is None:
+            st.warning("⚠️ Please provide your location!")
             return
 
         # Get AQI using kriging function
@@ -708,6 +766,10 @@ def render_alert_subscription_tab(df):
                 z_grid,
                 polygon
             )
+
+            if np.isnan(aqi_value):
+                st.error("❌ Could not determine AQI for this location. Please try a different location.")
+                return
 
             if outside:
                 st.warning("⚠️ Your location is outside Delhi boundary. Using nearest interpolated AQI value.")
@@ -724,41 +786,59 @@ def render_alert_subscription_tab(df):
             # Build message
             category, _, emoji, advice = get_aqi_category(aqi_value)
 
-            message = f"""📍 Air Quality Alert
-Lat: {user_lat:.4f}, Lon: {user_lon:.4f}
+            message = f"""📍 Delhi Air Quality Alert
 
+Location: {user_lat:.4f}, {user_lon:.4f}
 {emoji} AQI: {aqi_value:.0f} ({category})
-🌡️ Temp: {temp:.1f}°C
+🌡️ Temperature: {temp:.1f}°C
 🌤️ Weather: {weather_desc}
 
-💡 Advice: {advice}
+💡 Health Advice: {advice}
+
+Stay safe!
 """
 
-            # Send SMS
-            with st.spinner("Sending SMS..."):
-                response = send_sms_sms77(phone_number, message)
-
-            # Better response handling
-            st.success("✅ SMS sent successfully!")
+            # Send SMS using simple requests
+            try:
+                import requests
+                url = "https://gateway.sms77.io/api/sms"
+                params = {
+                    "to": phone_number,
+                    "text": message,
+                    "from": "AQIAlert"
+                }
+                headers = {
+                    "X-Api-Key": SMS77_API_KEY
+                }
+                response = requests.post(url, data=params, headers=headers, timeout=10)
+                
+                if response.status_code == 200:
+                    st.success("✅ SMS sent successfully!")
+                else:
+                    st.warning(f"⚠️ SMS service returned status code: {response.status_code}")
+                    
+            except Exception as sms_error:
+                st.warning(f"⚠️ SMS sending failed: {str(sms_error)}")
+                st.info("💡 Alert information shown below instead:")
             
-            # Display AQI info visually
+            # Display AQI info visually regardless of SMS status
             st.markdown(f"""
-            <div style="background-color: white; padding: 1.5rem; border-radius: 10px; border-left: 5px solid #2196F3; margin-top: 1rem;">
-                <h4 style="color: #0D47A1; margin-top: 0;">📍 Location AQI Details</h4>
-                <p style="margin: 0.5rem 0;"><strong>Coordinates:</strong> {user_lat:.4f}, {user_lon:.4f}</p>
-                <p style="margin: 0.5rem 0;"><strong>{emoji} AQI:</strong> {aqi_value:.0f} ({category})</p>
-                <p style="margin: 0.5rem 0;"><strong>🌡️ Temperature:</strong> {temp:.1f}°C</p>
-                <p style="margin: 0.5rem 0;"><strong>🌤️ Weather:</strong> {weather_desc}</p>
-                <p style="margin: 0.5rem 0;"><strong>💡 Advice:</strong> {advice}</p>
+            <div style="background-color: white; padding: 1.5rem; border-radius: 10px; border-left: 5px solid #2196F3; margin-top: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <h3 style="color: #0D47A1; margin-top: 0;">📍 Your Location AQI Details</h3>
+                <hr style="border: 1px solid #BBDEFB; margin: 1rem 0;">
+                <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>📍 Coordinates:</strong> {user_lat:.4f}, {user_lon:.4f}</p>
+                <p style="margin: 0.5rem 0; font-size: 1.3rem;"><strong>{emoji} AQI:</strong> <span style="color: #DC2626; font-weight: 700;">{aqi_value:.0f}</span> <span style="color: #64748B;">({category})</span></p>
+                <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>🌡️ Temperature:</strong> {temp:.1f}°C</p>
+                <p style="margin: 0.5rem 0; font-size: 1.1rem;"><strong>🌤️ Weather:</strong> {weather_desc}</p>
+                <hr style="border: 1px solid #BBDEFB; margin: 1rem 0;">
+                <p style="margin: 0.5rem 0; font-size: 1.05rem; color: #0D47A1;"><strong>💡 Health Advice:</strong><br>{advice}</p>
             </div>
             """, unsafe_allow_html=True)
-            
-            if response and isinstance(response, dict):
-                with st.expander("📋 View SMS API Response"):
-                    st.json(response)
                 
         except Exception as e:
             st.error(f"❌ Error getting AQI data: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
 
 
 def render_dummy_forecast_tab():
