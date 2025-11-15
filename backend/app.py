@@ -596,11 +596,33 @@ def render_alert_subscription_tab(df):
         st.error("Delhi boundary polygon not loaded.")
         return
 
-    # Load latest kriging data from session
+    # Load latest kriging data from session - AUTO-GENERATE IF NOT AVAILABLE
     kriging_data = st.session_state.get("kriging_output", None)
     if kriging_data is None:
-        st.warning("⚠️ Kriging data not available yet. Please run the **Kriging Heatmap** tab first to generate interpolated AQI data.")
-        return
+        st.info("🔄 Generating kriging interpolation automatically...")
+        
+        # Check if we have enough stations
+        if len(df) < 3:
+            st.error("Not enough AQI stations within Delhi boundary for interpolation (minimum 3 required).")
+            return
+            
+        delhi_bounds_tuple = (28.40, 28.88, 76.84, 77.35)
+        
+        try:
+            with st.spinner("Performing spatial interpolation..."):
+                lon_grid, lat_grid, z_grid = perform_kriging_correct(
+                    df,
+                    delhi_bounds_tuple,
+                    polygon=polygon,
+                    resolution=200
+                )
+                # Save to session state
+                st.session_state["kriging_output"] = (lon_grid, lat_grid, z_grid)
+                st.success("✅ Kriging data generated successfully!")
+                kriging_data = (lon_grid, lat_grid, z_grid)
+        except Exception as e:
+            st.error(f"Error generating kriging data: {str(e)}")
+            return
     
     lon_grid, lat_grid, z_grid = kriging_data
 
