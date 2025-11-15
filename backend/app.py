@@ -25,6 +25,8 @@ DELHI_BOUNDS = "28.404,76.840,28.883,77.349"
 DELHI_LAT = 28.6139
 DELHI_LON = 77.2090
 
+DELHI_GEOJSON_URL = "https://raw.githubusercontent.com/udit-001/india-maps-data/master/geojson/delhi.geojson"
+
 # Twilio Configuration (you need to add your credentials)
 TWILIO_ACCOUNT_SID = "AC2cc57109fc63de336609901187eca69d"
 TWILIO_AUTH_TOKEN = "62b791789bb490f91879e89fa2ed959d"
@@ -291,6 +293,29 @@ def fetch_live_data():
     except requests.RequestException:
         return pd.DataFrame()
 
+@st.cache_data(show_spinner="Loading Delhi boundary...")
+def load_delhi_boundary_from_url():
+    """Loads and caches the Delhi boundary GeoJSON from a URL."""
+    try:
+        
+        gdf = gpd.read_file(DELHI_GEOJSON_URL)
+        
+       
+        gdf = gdf.to_crs(epsg=4326) 
+        
+        # Combine all geometries into one single polygon
+        delhi_polygon = gdf.unary_union 
+        return gdf, delhi_polygon
+    except Exception as e:
+        st.error(f"Error loading boundary from URL: {e}")
+        st.error(f"URL tried: {DELHI_GEOJSON_URL}")
+        return None, None
+
+
+
+@st.cache_data(ttl=600, show_spinner="Fetching Air Quality Data...")
+def fetch_live_data():
+    # ... (rest of your function) ...
 
 @st.cache_data(ttl=1800, show_spinner="Fetching Weather Data...")
 def fetch_weather_data():
@@ -321,8 +346,16 @@ def get_aqi_category(aqi):
 
 
 def render_kriging_tab(df):
-    st.markdown("### 🌡️ Interpolated AQI Heatmap (Kriging, UTM-corrected)")
+    st.markdown("### 🌡️ Interpolated AQI Heatmap (Kriging, Masked to Delhi)")
 
+    # 1. --- THIS IS THE ONLY LINE TO CHANGE ---
+    delhi_gdf, delhi_polygon = load_delhi_boundary_from_url()
+    # --- END OF CHANGE ---
+    
+    if delhi_gdf is None or delhi_polygon is None:
+        st.warning("Cannot render Kriging map: Delhi shapefile is not loaded.")
+        return
+        
     if df.empty:
         st.warning("No AQI stations available.")
         return
