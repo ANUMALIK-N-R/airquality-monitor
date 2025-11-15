@@ -383,17 +383,28 @@ def render_kriging_tab(df):
         st.error("Not enough AQI stations within Delhi boundary for kriging interpolation (minimum 3 required).")
         return
 
-    # Show station info
+    # Show station info with actual data range
     st.info(f"📊 Using {len(df)} monitoring stations within Delhi boundary for interpolation.")
     
+    st.markdown("### 📍 Station Data Summary")
+    
     # Display station statistics
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Min AQI", f"{df['aqi'].min():.0f}", delta=f"at {df.loc[df['aqi'].idxmin(), 'station_name']}")
+        st.metric("Stations", len(df))
     with col2:
-        st.metric("Max AQI", f"{df['aqi'].max():.0f}", delta=f"at {df.loc[df['aqi'].idxmax(), 'station_name']}")
+        min_station = df.loc[df['aqi'].idxmin(), 'station_name']
+        st.metric("Min AQI", f"{df['aqi'].min():.0f}", delta=f"at {min_station}")
     with col3:
+        max_station = df.loc[df['aqi'].idxmax(), 'station_name']
+        st.metric("Max AQI", f"{df['aqi'].max():.0f}", delta=f"at {max_station}")
+    with col4:
         st.metric("Avg AQI", f"{df['aqi'].mean():.0f}")
+    
+    # Show actual station values for reference
+    with st.expander("🔍 View All Station Values"):
+        station_display = df[['station_name', 'aqi', 'lat', 'lon']].sort_values('aqi')
+        st.dataframe(station_display, use_container_width=True, hide_index=True)
 
     with st.spinner("Performing spatial interpolation..."):
         try:
