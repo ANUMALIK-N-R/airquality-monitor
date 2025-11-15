@@ -339,37 +339,27 @@ def get_aqi_category(aqi):
 
 def render_kriging_tab(df):
     st.markdown("### 🌡️ Interpolated AQI Heatmap (Kriging, Masked to Delhi)")
-
-    # 1. --- THIS IS THE ONLY LINE TO CHANGE ---
     delhi_gdf, delhi_polygon = load_delhi_boundary_from_url()
-    # --- END OF CHANGE ---
-    
-    if delhi_gdf is None or delhi_polygon is None:
-        st.warning("Cannot render Kriging map: Delhi shapefile is not loaded.")
-        return
-        
-    if df.empty:
-        st.warning("No AQI stations available.")
-        return
 
-    # 🚨 NEW SAFETY RULES
-    if df["aqi"].nunique() < 2:
-        st.error("Kriging cannot run because all AQI values are identical.")
-        return
+if delhi_gdf is None:
+    st.error("Delhi boundary could not be loaded.")
+    return
 
-    if len(df) < 4:
-        st.error("Not enough AQI stations available for kriging (need ≥ 4).")
-        return
+    # Convert polygon to UTM
+    project_to_utm = pyproj.Transformer.from_crs(
+        "epsg:4326", "epsg:32643", always_xy=True
+    ).transform
 
-    if df[['lat','lon']].duplicated().any():
-        st.error("Duplicate station coordinates found — kriging cannot proceed.")
-        return
+    delhi_polygon_utm = transform(project_to_utm, delhi_polygon)
 
-    # Continue only if all safe
     delhi_bounds_tuple = (28.40, 28.88, 76.84, 77.35)
 
     with st.spinner("Performing spatial interpolation..."):
-        lon_grid, lat_grid, z = perform_kriging_correct(df, delhi_bounds_tuple)
+        lon_grid, lat_grid, z = perform_kriging_correct(
+            df,
+            delhi_bounds_tuple,
+            polygon=delhi_polygon_utm   # <-- the FIX
+        )
 
 
     heatmap_df = pd.DataFrame({
