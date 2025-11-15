@@ -411,7 +411,6 @@ def get_aqi_category(aqi):
     else:
         return "Hazardous", [126, 34, 206], "☠️", "Health warnings of emergency conditions. The entire population is more likely to be affected."
 
-
 def render_kriging_tab(df):
 
     st.subheader("Spatial Interpolation (Kriging)")
@@ -423,31 +422,21 @@ def render_kriging_tab(df):
 
     if delhi_gdf is None:
         st.error("Delhi boundary could not be loaded.")
-        return   # ← THIS MUST BE INSIDE THE FUNCTION
-
-    with st.spinner("Performing spatial interpolation..."):
-        lon_grid, lat_grid, z = perform_kriging_correct(
-            df, delhi_bounds_tuple, polygon=delhi_polygon, resolution=200
-        )
-
-
-    # Convert polygon to UTM
-    project_to_utm = pyproj.Transformer.from_crs(
-        "epsg:4326", "epsg:32643", always_xy=True
-    ).transform
-
-    delhi_polygon_utm = transform(project_to_utm, delhi_polygon)
-
-    delhi_bounds_tuple = (28.40, 28.88, 76.84, 77.35)
+        return
 
     with st.spinner("Performing spatial interpolation..."):
         lon_grid, lat_grid, z = perform_kriging_correct(
             df,
             delhi_bounds_tuple,
-            polygon=delhi_polygon_utm   # <-- the FIX
+            polygon=delhi_polygon,
+            resolution=200
         )
 
+    # ❗ SAVE THE RESULT FOR SMS TAB
+    st.session_state["kriging_result"] = (lon_grid, lat_grid, z)
+    st.success("Kriging result stored successfully!")
 
+    # Create Heatmap
     heatmap_df = pd.DataFrame({
         "lon": lon_grid.flatten(),
         "lat": lat_grid.flatten(),
