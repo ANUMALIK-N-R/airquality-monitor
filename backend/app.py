@@ -6,6 +6,7 @@ import pydeck as pdk
 import plotly.express as px
 from datetime import datetime, timedelta
 from krigging import perform_kriging_correct
+from krigging import get_aqi_at_location
 import geopandas as gpd
 from shapely.geometry import Point
 import pyproj
@@ -69,19 +70,6 @@ def send_sms_sms77(phone, text):
 
     r = requests.post(url, data=payload, headers=headers)
     return r.json()
-
-
-def get_aqi_from_kriging_point(user_lon, user_lat, lon_grid, lat_grid, z_grid):
-    """
-    Returns interpolated AQI from the kriging grid at the user's exact location.
-    """
-    dist = (lon_grid - user_lon)**2 + (lat_grid - user_lat)**2
-    idx = np.unravel_index(np.argmin(dist), dist.shape)
-
-    value = z_grid[idx]
-    if np.isnan(value):
-        return None
-    return float(value)
 
 
 # ==========================
@@ -653,104 +641,109 @@ def render_alerts_tab(df):
 
 
 def render_alert_subscription_tab(df):
-    st.markdown('<div class="section-header">📱 SMS Alert Subscription</div>', unsafe_allow_html=True)
+    st.subheader("📩 Real-Time AQI Alerts (via SMS)")
 
-    st.info("Your location will be detected automatically. You can still edit it manually.", icon="📍")
+    # Load polygon for Delhi
+    polygon = st.session_state.get("delhi_polygon", None)
+    if polygon is None:
+        st.error("Delhi boundary polygon not loaded.")
+        return
 
-    # --- AUTO GPS DETECTION ---
-    geo = get_user_geolocation()
-    if geo:
-        auto_lat, auto_lon = geo
-    else:
-        auto_lat, auto_lon = 28.6139, 77.2090
+    # Load latest kriging data from session
+    kriging_data = st.session_state.get("kriging_output", None)
+    if kriging_data is None:
+        st.error("Kriging data not available yet.")
+        return
 
-    # --- USER INPUT ---
+    lon_grid, lat_grid, z_grid = kriging_data
+
+    st.markdown("### 📍 Get your location automatically")
+    st.info("Click the button to fetch your GPS coordinates from browser.")
+
+    # Javascript auto-location button
+    js_code = """
+        <script>
+        navigator.geolocation.getCurrentPosition(
+            function(pos) {
+                const coords = pos.coords.latitude + "," + pos.coords.longitude;
+                document.getElementById("coords_input").value = coords;
+            },
+            function(err) {
+                alert("Location access denied.");
+            }
+        );
+        </script>
+    """
+
+    st.markdown('<input id="coords_input" type="text" style="width:0;height:0;border:0;">', unsafe_allow_html=True)
+    st.markdown(js_code, unsafe_allow_html=True)
+    st.button("📡 Use My Current Location")
+
+    coords_raw = st.empty()
+    coords = st.session_state.get("coords_input", None)
+
+    # Manual entry fallback
+    st.markdown("### Or manually enter coordinates")
+
     col1, col2 = st.columns(2)
-
     with col1:
-        location_name = st.text_input(
-            "📍 Your Location Name",
-            placeholder="Connaught Place, Delhi",
-        )
-
-        user_lat = st.number_input(
-            "Latitude",
-            value=auto_lat,
-            step=0.0001,
-            format="%.6f"
-        )
-
-        user_lon = st.number_input(
-            "Longitude",
-            value=auto_lon,
-            step=0.0001,
-            format="%.6f"
-        )
-
+        user_lat = st.number_input("Latitude", format="%.6f", step=0.000001)
     with col2:
-        phone_number = st.text_input(
-            "📱 Phone Number (SMS77.io)",
-            placeholder="+91XXXXXXXXXX"
+        user_lon = st.number_input("Longitude", format="%.6f", step=0.000001)
+
+    st.markdown("### 📱 SMS Phone Number")
+    phone_number = st.text_input("Enter phone number with country code", placeholder="+91XXXXXXXXXX")
+
+    if st.button("Send AQI Alert"):
+        if not phone_number:
+            st.warning("Enter a phone number!")
+            return
+
+        # Determine which coordinates to use
+        if coords:
+            try:
+                auto_lat, auto_lon = map(float, coords.split(","))
+                user_lat, user_lon = auto_lat, auto_lon
+            except:
+                pass
+
+        # Get AQI using kriging function
+        aqi_value, outside = get_aqi_at_location(
+            user_lat,
+            user_lon,
+            lat_grid,
+            lon_grid,
+            z_grid,
+            polygon
         )
 
-        radius = st.slider("Search Radius (km)", 1, 20, 10)
+        if outside:
+            st.warning("⚠️ Your location is outside Delhi. Using nearest AQI value.")
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        send_button = st.button("📤 Send Alert Now", use_container_width=True)
-
-    # --- PROCESS ACTION ---
-    if send_button:
-        if not phone_number.startswith("+"):
-            st.error("Phone number must include country code. Example: +919876543210")
-            return
-        
-        if location_name.strip() == "":
-            st.error("Please enter your location name.")
-            return
-
-        # --- Use KRIGING GRID instead of station data ---
-        st.info("Using interpolated AQI value from Kriging heatmap...")
-
-        lon_grid, lat_grid, z_grid = st.session_state.get("kriging_result", (None,None,None))
-
-        if lon_grid is None:
-            st.error("Kriging has not been computed yet. Please visit the Kriging tab first.")
-            return
-
-        # Get AQI at user's exact location
-        aqi_value = get_aqi_from_kriging_point(
-            user_lon, user_lat, lon_grid, lat_grid, z_grid
-        )
-
-        if aqi_value is None:
-            st.error("Your location falls outside the interpolation area.")
-            return
-
-        # Weather
+        # Weather data
         weather = fetch_weather_data()
         weather_desc, _ = get_weather_info(weather["current"]["weather_code"])
         temp = weather["current"]["temperature_2m"]
 
-        # Create message
+        # Build message
         category, _, emoji, advice = get_aqi_category(aqi_value)
 
         message = f"""
-📍 Air Quality Alert — {location_name}
+📍 Air Quality Alert
+Lat: {user_lat:.4f}, Lon: {user_lon:.4f}
 
 {emoji} AQI: {aqi_value:.0f} ({category})
 🌡️ Temp: {temp:.1f}°C
 🌤️ Weather: {weather_desc}
 
 💡 Advice: {advice}
-
-Stay safe!
 """
 
-        # SEND SMS (SMS77.io)
-        api_response = send_sms_sms77(phone_number, message)
+        # Send SMS
+        response = send_sms_sms77(phone_number, message)
 
         st.success("SMS sent successfully!")
-        st.json(api_response)
+        st.json(response)
 
 def render_dummy_forecast_tab():
     """Render a dummy 24-hour AQI forecast using simulated data."""
