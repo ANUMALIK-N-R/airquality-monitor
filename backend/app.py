@@ -22,53 +22,17 @@ def load_delhi_boundary_from_url():
             gdf = gdf.to_crs("EPSG:4326")
 
         polygon = gdf.unary_union
-        return polygon
+        return gdf, polygon
 
     except Exception as e:
         st.error(f"Failed to load Delhi polygon: {e}")
-        return None
+        return None, None
 
 # Load once into session_state
-if "delhi_polygon" not in st.session_state:
-    st.session_state["delhi_polygon"] = load_delhi_boundary_from_url()
-
-def get_user_geolocation():
-    """
-    Gets user location using browser geolocation.
-    On the first run, JS runs and asks for location.
-    On reload, lat/lon appear in query params.
-    """
-    query = st.experimental_get_query_params()
-
-    if "lat" in query and "lon" in query:
-        try:
-            lat = float(query["lat"][0])
-            lon = float(query["lon"][0])
-            return lat, lon
-        except:
-            return None
-
-
-    # Ask browser for location (JavaScript)
-    st.markdown("""
-        <script>
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                const lat = pos.coords.latitude;
-                const lon = pos.coords.longitude;
-                const params = new URLSearchParams(window.location.search);
-                params.set("lat", lat);
-                params.set("lon", lon);
-                window.location.search = params.toString();
-            },
-            (err) => {
-                console.log("Geolocation blocked:", err);
-            }
-        );
-        </script>
-    """, unsafe_allow_html=True)
-
-    return None
+if "delhi_gdf" not in st.session_state or "delhi_polygon" not in st.session_state:
+    gdf, polygon = load_delhi_boundary_from_url()
+    st.session_state["delhi_gdf"] = gdf
+    st.session_state["delhi_polygon"] = polygon
 
 
 # set SMS77_API_KEY via st.secrets or environment
@@ -326,30 +290,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data(show_spinner="Loading Delhi boundary...")
-def load_delhi_boundary_from_url():
-    """Loads and caches the Delhi boundary GeoJSON from a URL."""
-    try:
-        gdf = gpd.read_file(DELHI_GEOJSON_URL)
-        # Ensure EPSG:4326
-        if gdf.crs is None:
-            gdf.set_crs(epsg=4326, inplace=True)
-        else:
-            gdf = gdf.to_crs(epsg=4326)
-
-        # Combine into a single polygon (unary_union)
-        delhi_polygon = gdf.unary_union
-        return gdf, delhi_polygon
-    except Exception as e:
-        st.error(f"Error loading boundary from URL: {e}")
-        st.error(f"URL tried: {DELHI_GEOJSON_URL}")
-        return None, None
-    # Only initialize once and store both gdf and polygon
-    if "delhi_gdf" not in st.session_state or "delhi_polygon" not in st.session_state:
-        gdf, polygon = load_delhi_boundary_from_url()
-        st.session_state["delhi_gdf"] = gdf
-        st.session_state["delhi_polygon"] = polygon
-
 
 @st.cache_data(ttl=600, show_spinner="Fetching Air Quality Data...")
 def fetch_live_data():
@@ -398,7 +338,6 @@ def fetch_live_data():
     except requests.RequestException:
         return pd.DataFrame()
 
-    # ... (rest of your function) ...
 
 @st.cache_data(ttl=1800, show_spinner="Fetching Weather Data...")
 def fetch_weather_data():
@@ -428,54 +367,61 @@ def get_aqi_category(aqi):
         return "Hazardous", [126, 34, 206], "☠️", "Health warnings of emergency conditions. The entire population is more likely to be affected."
 
 def render_kriging_tab(df):
-
     st.subheader("Spatial Interpolation (Kriging)")
 
     delhi_bounds_tuple = (28.40, 28.88, 76.84, 77.35)
 
-    # Load polygon
-    delhi_gdf, delhi_polygon = load_delhi_boundary_from_url()
+    # Load polygon from session state
+    delhi_polygon = st.session_state.get("delhi_polygon", None)
 
-    if delhi_gdf is None:
+    if delhi_polygon is None:
         st.error("Delhi boundary could not be loaded.")
         return
 
+    # Check if we have enough stations
+    if len(df) < 3:
+        st.error("Not enough AQI stations within Delhi boundary for kriging interpolation (minimum 3 required).")
+        return
+
     with st.spinner("Performing spatial interpolation..."):
-        lon_grid, lat_grid, z = perform_kriging_correct(
-            df,
-            delhi_bounds_tuple,
-            polygon=delhi_polygon,
-            resolution=200
-        )
+        try:
+            lon_grid, lat_grid, z = perform_kriging_correct(
+                df,
+                delhi_bounds_tuple,
+                polygon=delhi_polygon,
+                resolution=200
+            )
 
-    # ❗ SAVE THE RESULT FOR SMS TAB
-    st.session_state["kriging_output"] = (lon_grid, lat_grid, z)
-    st.success("Kriging result stored successfully!")
+            # ❗ SAVE THE RESULT FOR SMS TAB
+            st.session_state["kriging_output"] = (lon_grid, lat_grid, z)
+            st.success("Kriging result stored successfully!")
 
+            # Create Heatmap
+            heatmap_df = pd.DataFrame({
+                "lon": lon_grid.flatten(),
+                "lat": lat_grid.flatten(),
+                "aqi": z.flatten()
+            })
 
-    # Create Heatmap
-    heatmap_df = pd.DataFrame({
-        "lon": lon_grid.flatten(),
-        "lat": lat_grid.flatten(),
-        "aqi": z.flatten()
-    })
+            fig = px.density_mapbox(
+                heatmap_df,
+                lat="lat",
+                lon="lon",
+                z="aqi",
+                radius=10,
+                center=dict(lat=28.6139, lon=77.2090),
+                zoom=9,
+                mapbox_style="carto-positron",
+                color_continuous_scale=[
+                    "#009E60", "#FFD600", "#F97316",
+                    "#DC2626", "#9333EA", "#7E22CE"
+                ]
+            )
 
-    fig = px.density_mapbox(
-        heatmap_df,
-        lat="lat",
-        lon="lon",
-        z="aqi",
-        radius=10,
-        center=dict(lat=28.6139, lon=77.2090),
-        zoom=9,
-        mapbox_style="carto-positron",
-        color_continuous_scale=[
-            "#009E60", "#FFD600", "#F97316",
-            "#DC2626", "#9333EA", "#7E22CE"
-        ]
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        except Exception as e:
+            st.error(f"Error performing kriging: {str(e)}")
 
 
 
@@ -491,35 +437,6 @@ def get_weather_info(code):
         96: ("Thunderstorm, slight hail", "⛈️"), 99: ("Thunderstorm, heavy hail", "⛈️")
     }
     return codes.get(code, ("Unknown", "❓"))
-
-
-def calculate_distance(lat1, lon1, lat2, lon2):
-    """Calculate distance between two coordinates using Haversine formula."""
-    from math import radians, sin, cos, sqrt, atan2
-
-    R = 6371  # Earth's radius in kilometers
-
-    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-
-    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-    c = 2 * atan2(sqrt(a), sqrt(1-a))
-    distance = R * c
-
-    return distance
-
-
-def get_nearby_stations(df, user_lat, user_lon, radius_km=10):
-    """Get stations within specified radius of user location."""
-    df['distance'] = df.apply(
-        lambda row: calculate_distance(
-            user_lat, user_lon, row['lat'], row['lon']),
-        axis=1
-    )
-    nearby = df[df['distance'] <= radius_km].sort_values('distance')
-    return nearby
-
 
 
 # ==========================
@@ -641,6 +558,7 @@ def render_map_tab(df):
         tooltip={"html": "<b>{station_name}</b><br/>AQI: {aqi}<br/>Category: {category}<br/>Last Updated: {last_updated}",
                  "style": {"color": "white"}}
     ))
+
 def render_alerts_tab(df):
     """Renders health alerts and advice based on current AQI levels."""
     st.markdown('<div class="section-header">🔔 Health Alerts & Recommendations</div>',
@@ -672,7 +590,7 @@ def render_alerts_tab(df):
 def render_alert_subscription_tab(df):
     st.subheader("📩 Real-Time AQI Alerts (via SMS)")
 
-    # Load polygon for Delhi
+    # Load polygon for Delhi from session state
     polygon = st.session_state.get("delhi_polygon", None)
     if polygon is None:
         st.error("Delhi boundary polygon not loaded.")
@@ -681,86 +599,59 @@ def render_alert_subscription_tab(df):
     # Load latest kriging data from session
     kriging_data = st.session_state.get("kriging_output", None)
     if kriging_data is None:
-        st.error("Kriging data not available yet. Please run the Kriging Heatmap tab first.")
+        st.warning("⚠️ Kriging data not available yet. Please run the **Kriging Heatmap** tab first to generate interpolated AQI data.")
         return
+    
     lon_grid, lat_grid, z_grid = kriging_data
 
-
-    lon_grid, lat_grid, z_grid = kriging_data
-
-    st.markdown("### 📍 Get your location automatically")
-    st.info("Click the button to fetch your GPS coordinates from browser.")
-
-    # Javascript auto-location button
-    js_code = """
-        <script>
-        navigator.geolocation.getCurrentPosition(
-            function(pos) {
-                const coords = pos.coords.latitude + "," + pos.coords.longitude;
-                document.getElementById("coords_input").value = coords;
-            },
-            function(err) {
-                alert("Location access denied.");
-            }
-        );
-        </script>
-    """
-
-    st.markdown('<input id="coords_input" type="text" style="width:0;height:0;border:0;">', unsafe_allow_html=True)
-    st.markdown(js_code, unsafe_allow_html=True)
-    st.button("📡 Use My Current Location")
-
-    coords_raw = st.empty()
-    coords = st.session_state.get("coords_input", None)
-
-    # Manual entry fallback
-    st.markdown("### Or manually enter coordinates")
+    st.markdown("### 📍 Enter Your Location")
+    st.info("💡 Provide your coordinates to get AQI information from our kriging model (interpolated data across Delhi).")
 
     col1, col2 = st.columns(2)
     with col1:
-        user_lat = st.number_input("Latitude", format="%.6f", step=0.000001)
+        user_lat = st.number_input("Latitude", format="%.6f", step=0.000001, value=28.6139)
     with col2:
-        user_lon = st.number_input("Longitude", format="%.6f", step=0.000001)
+        user_lon = st.number_input("Longitude", format="%.6f", step=0.000001, value=77.2090)
 
     st.markdown("### 📱 SMS Phone Number")
     phone_number = st.text_input("Enter phone number with country code", placeholder="+91XXXXXXXXXX")
 
-    if st.button("Send AQI Alert"):
+    if st.button("🚀 Send AQI Alert SMS"):
         if not phone_number:
-            st.warning("Enter a phone number!")
+            st.warning("⚠️ Please enter a phone number!")
             return
 
-        # Determine which coordinates to use
-        if coords:
-            try:
-                auto_lat, auto_lon = map(float, coords.split(","))
-                user_lat, user_lon = auto_lat, auto_lon
-            except:
-                pass
+        if user_lat == 0.0 or user_lon == 0.0:
+            st.warning("⚠️ Please enter valid coordinates!")
+            return
 
         # Get AQI using kriging function
-        aqi_value, outside = get_aqi_at_location(
-            user_lat,
-            user_lon,
-            lat_grid,
-            lon_grid,
-            z_grid,
-            polygon
-        )
+        try:
+            aqi_value, outside = get_aqi_at_location(
+                user_lat,
+                user_lon,
+                lat_grid,
+                lon_grid,
+                z_grid,
+                polygon
+            )
 
-        if outside:
-            st.warning("⚠️ Your location is outside Delhi. Using nearest AQI value.")
+            if outside:
+                st.warning("⚠️ Your location is outside Delhi boundary. Using nearest interpolated AQI value.")
 
-        # Weather data
-        weather = fetch_weather_data()
-        weather_desc, _ = get_weather_info(weather["current"]["weather_code"])
-        temp = weather["current"]["temperature_2m"]
+            # Get weather data
+            weather = fetch_weather_data()
+            if weather and "current" in weather:
+                weather_desc, _ = get_weather_info(weather["current"]["weather_code"])
+                temp = weather["current"]["temperature_2m"]
+            else:
+                weather_desc = "N/A"
+                temp = 0.0
 
-        # Build message
-        category, _, emoji, advice = get_aqi_category(aqi_value)
+            # Build message
+            category, _, emoji, advice = get_aqi_category(aqi_value)
 
-        message = f"""
-📍 Air Quality Alert
+            message = f"""📍 Air Quality Alert
 Lat: {user_lat:.4f}, Lon: {user_lon:.4f}
 
 {emoji} AQI: {aqi_value:.0f} ({category})
@@ -770,11 +661,19 @@ Lat: {user_lat:.4f}, Lon: {user_lon:.4f}
 💡 Advice: {advice}
 """
 
-        # Send SMS
-        response = send_sms_sms77(phone_number, message)
+            # Send SMS
+            with st.spinner("Sending SMS..."):
+                response = send_sms_sms77(phone_number, message)
 
-        st.success("SMS sent successfully!")
-        st.json(response)
+            if response.get("success") or response.get("status") != "error":
+                st.success("✅ SMS sent successfully!")
+                st.json(response)
+            else:
+                st.error(f"❌ Failed to send SMS: {response}")
+                
+        except Exception as e:
+            st.error(f"❌ Error getting AQI data: {str(e)}")
+
 
 def render_dummy_forecast_tab():
     """Render a dummy 24-hour AQI forecast using simulated data."""
@@ -897,28 +796,33 @@ if aqi_data_raw.empty:
     # Render header with empty data to avoid crashing
     render_header(aqi_data_raw) 
 else:
-    # --- START OF NEW LOGIC ---
-    # 1. Load the Delhi boundary
-    delhi_gdf, delhi_polygon = load_delhi_boundary_from_url()
+    # --- START OF FILTERING LOGIC ---
+    # 1. Load the Delhi boundary from session state
+    delhi_gdf = st.session_state.get("delhi_gdf", None)
+    delhi_polygon = st.session_state.get("delhi_polygon", None)
     
     aqi_data_filtered = pd.DataFrame() # Create an empty df
     
-    if delhi_gdf is not None:
+    if delhi_polygon is not None:
         # 2. Convert raw station data to a GeoDataFrame
         geometry = [Point(xy) for xy in zip(aqi_data_raw['lon'], aqi_data_raw['lat'])]
         stations_gdf = gpd.GeoDataFrame(aqi_data_raw, crs="epsg:4326", geometry=geometry)
         
         # 3. Clip stations to keep only those INSIDE the Delhi polygon
         aqi_data_filtered = gpd.clip(stations_gdf, delhi_polygon)
+        
+        # Convert back to regular DataFrame to avoid geometry column issues
+        if not aqi_data_filtered.empty:
+            aqi_data_filtered = pd.DataFrame(aqi_data_filtered.drop(columns='geometry'))
     
     if aqi_data_filtered.empty:
-        st.error("⚠️ **No monitoring stations found *inside* the Delhi boundary.** Showing raw data for the region.", icon="🚨")
+        st.warning("⚠️ **No monitoring stations found inside the Delhi boundary.** Showing all available data for the region.", icon="⚠️")
         # Fallback to raw data if filtering fails or finds nothing
         aqi_data_to_display = aqi_data_raw
     else:
         st.success(f"✅ Loaded {len(aqi_data_filtered)} monitoring stations inside the Delhi boundary.", icon="🛰️")
         aqi_data_to_display = aqi_data_filtered
-    # --- END OF NEW LOGIC ---
+    # --- END OF FILTERING LOGIC ---
 
     # 4. Render all components using the (now filtered) data
     render_header(aqi_data_to_display)
@@ -948,7 +852,7 @@ else:
     with tab4:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            # Pass the filtered data (for nearby calculations)
+            # Pass the filtered data (for reference only, main data comes from kriging)
             render_alert_subscription_tab(aqi_data_to_display)
             st.markdown('</div>', unsafe_allow_html=True)
     with tab5:
@@ -959,7 +863,6 @@ else:
     with tab6:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            # Pass the filtered data
+            # Pass the filtered data (only stations within Delhi boundary)
             render_kriging_tab(aqi_data_to_display) 
             st.markdown('</div>', unsafe_allow_html=True)
-
