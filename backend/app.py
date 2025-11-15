@@ -5,7 +5,7 @@ import requests
 import pydeck as pdk
 import plotly.express as px
 from datetime import datetime, timedelta
-from kriging import perform_kriging_correct
+from krigging import perform_kriging_correct
 
 
 # ==========================
