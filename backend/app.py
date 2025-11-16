@@ -831,4 +831,4 @@ def render_header(df):
                 <div class="metric-card-label">Current Weather</div>
                 <div style="color: #1976D2; margin-top: 1rem;">Weather data unavailable</div>
             </div>
-            """, unsafe_allow_html=True
+            """, unsafe_allow_html=True)
