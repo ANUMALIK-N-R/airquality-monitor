@@ -842,12 +842,14 @@ def render_kriging_tab(df):
             
             heatmap_df = heatmap_df.dropna(subset=['aqi'])
 
-            fig = px.density_mapbox(
+           fig = px.scatter_mapbox(
                 heatmap_df,
                 lat="lat",
                 lon="lon",
-                z="aqi",
-                radius=15,
+                color="aqi",  # <--- Use 'color' to map AQI to the color scale
+                opacity=0.5,
+                size="aqi",   # <--- Optional: makes high AQI spots slightly bigger
+                size_max=8,   # <--- Controls the marker size
                 center=dict(lat=28.6139, lon=77.2090),
                 zoom=9.5,
                 mapbox_style="carto-positron",
@@ -858,7 +860,6 @@ def render_kriging_tab(df):
                 range_color=[0, 400],
                 title="Interpolated AQI Heatmap across Delhi"
             )
-            
             fig.update_layout(
                 margin=dict(t=40, b=0, l=0, r=0),
                 coloraxis_colorbar=dict(
