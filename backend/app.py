@@ -12,8 +12,6 @@ import geopandas as gpd
 from shapely.geometry import Point
 import pyproj
 from shapely.ops import transform
-import smtplib
-from email.message import EmailMessage
 import json
 from pathlib import Path
 import os # Added for Telegram config
@@ -47,8 +45,6 @@ HISTORICAL_DATA_FILE = HISTORICAL_DATA_DIR / "aqi_history.json"
 # ==========================
 # 1. Get your Bot Token from @BotFather on Telegram
 # 2. It's best to set this as an environment variable for security
-#    Example: TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-#    For testing, you can hardcode it (but don't share it publicly!):
 TELEGRAM_BOT_TOKEN = "8582253332:AAECTJHc6o9Q2OVWhi-FIGIDyagosLtDdJo"  # <-- ❗️ REPLACE THIS
 
 def send_telegram_notification(bot_token, chat_id, message):
@@ -706,6 +702,14 @@ st.markdown("""
         margin: 1rem 0;
         border-left: 5px solid #2196F3;
     }
+    
+    .member-card {
+        background-color: #F8F9FA;
+        border: 1px solid #DEE2E6;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
 
 </style>
 """, unsafe_allow_html=True)
@@ -1053,217 +1057,6 @@ def render_alerts_tab(df):
         st.success("✅ No significant air quality alerts at the moment. AQI levels are currently within the good to moderate range for most areas.", icon="✅")
 
 
-def render_alert_subscription_tab(df):
-    # --- THIS IS THE NEW FUNCTION FROM FILE 2 ---
-    st.subheader("📩 Real-Time AQI Alerts (via Telegram)")
-
-    # Load polygon for Delhi from session state
-    polygon = st.session_state.get("delhi_polygon", None)
-    if polygon is None:
-        st.error("Delhi boundary polygon not loaded.")
-        return
-
-    # Load latest kriging data from session - AUTO-GENERATE IF NOT AVAILABLE
-    kriging_data = st.session_state.get("kriging_output", None)
-    if kriging_data is None:
-        st.info("🔄 Generating kriging interpolation automatically...")
-        
-        # Check if we have enough stations
-        if len(df) < 3:
-            st.error("Not enough AQI stations within Delhi boundary for interpolation (minimum 3 required).")
-            return
-            
-        delhi_bounds_tuple = (28.40, 28.88, 76.84, 77.35)
-        
-        try:
-            with st.spinner("Performing spatial interpolation..."):
-                lon_grid, lat_grid, z_grid = perform_kriging_correct(
-                    df,
-                    delhi_bounds_tuple,
-                    polygon=polygon,
-                    resolution=200
-                )
-                # Save to session state
-                st.session_state["kriging_output"] = (lon_grid, lat_grid, z_grid)
-                st.success("✅ Kriging data generated successfully!")
-                kriging_data = (lon_grid, lat_grid, z_grid)
-        except Exception as e:
-            st.error(f"Error generating kriging data: {str(e)}")
-            return
-    
-    lon_grid, lat_grid, z_grid = kriging_data
-
-    st.markdown("### 📍 Select Your Location")
-    
-    # Location method selection
-    location_method = st.radio(
-        "Choose how to provide your location:",
-        ["🗺️ Select from Map/Dropdown", "✍️ Enter Coordinates Manually", "📡 Use Device GPS"],
-        horizontal=True
-    )
-    
-    user_lat = None
-    user_lon = None
-    
-    if location_method == "🗺️ Select from Map/Dropdown":
-        st.info("💡 Select a popular location in Delhi or choose from monitoring stations")
-        
-        # Popular Delhi locations
-        popular_locations = {
-            "Connaught Place": (28.6315, 77.2167),
-            "India Gate": (28.6129, 77.2295),
-            "Red Fort": (28.6562, 77.2410),
-            "Qutub Minar": (28.5244, 77.1855),
-            "Lotus Temple": (28.5535, 77.2588),
-            "Chandni Chowk": (28.6506, 77.2303),
-            "Karol Bagh": (28.6519, 77.1906),
-            "Dwarka": (28.5921, 77.0460),
-            "Rohini": (28.7496, 77.0670),
-            "Nehru Place": (28.5494, 77.2501)
-        }
-        
-        # Add monitoring stations to dropdown
-        station_locations = {}
-        for _, row in df.iterrows():
-            station_locations[f"📍 {row['station_name']} (AQI: {row['aqi']:.0f})"] = (row['lat'], row['lon'])
-        
-        all_locations = {**popular_locations, **station_locations}
-        
-        selected_location = st.selectbox(
-            "Select Location:",
-            options=list(all_locations.keys())
-        )
-        
-        user_lat, user_lon = all_locations[selected_location]
-        st.success(f"✅ Selected: {selected_location} ({user_lat:.4f}, {user_lon:.4f})")
-        
-    elif location_method == "✍️ Enter Coordinates Manually":
-        st.info("💡 Enter latitude and longitude coordinates")
-        col1, col2 = st.columns(2)
-        with col1:
-            user_lat = st.number_input("Latitude", format="%.6f", step=0.000001, value=28.6139)
-        with col2:
-            user_lon = st.number_input("Longitude", format="%.6f", step=0.000001, value=77.2090)
-            
-    else:  # Device GPS
-        st.info("📡 Click the button below to request your device location")
-        
-        if st.button("📍 Get My Location", key="gps_button"):
-            st.markdown("""
-                <script>
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        function(position) {
-                            const lat = position.coords.latitude;
-                            const lon = position.coords.longitude;
-                            
-                            // Store in session storage
-                            sessionStorage.setItem('user_lat', lat);
-                            sessionStorage.setItem('user_lon', lon);
-                            
-                            // Reload page to update
-                            window.location.reload();
-                        },
-                        function(error) {
-                            alert('Error getting location: ' + error.message);
-                        }
-                    );
-                } else {
-                    alert('Geolocation is not supported by your browser');
-                }
-                </script>
-            """, unsafe_allow_html=True)
-        
-        # Try to read from query params (after reload)
-        query_params = st.experimental_get_query_params()
-        if 'lat' in query_params and 'lon' in query_params:
-            try:
-                user_lat = float(query_params['lat'][0])
-                user_lon = float(query_params['lon'][0])
-                st.success(f"✅ GPS Location: {user_lat:.4f}, {user_lon:.4f}")
-            except:
-                st.warning("⚠️ Could not parse GPS coordinates")
-
-    st.markdown("---")
-    
-    st.markdown("### 📱 Telegram Alert Configuration")
-    
-    chat_id = st.text_input(
-        "Your Telegram Chat ID", 
-        placeholder="123456789",
-        help="How to find your Chat ID: Open Telegram, search for the bot @userinfobot, start it, and copy the ID it gives you."
-    )
-    st.caption("ℹ️ To get your Chat ID, message `@userinfobot` on Telegram and copy the number it sends you.")
-
-    if st.button("🚀 Get AQI Alert via Telegram", type="primary", use_container_width=True):
-        if not chat_id:
-            st.warning("⚠️ Please enter your Telegram Chat ID!")
-            return
-
-        if user_lat is None or user_lon is None:
-            st.warning("⚠️ Please provide your location!")
-            return
-
-        # Get AQI using kriging function
-        try:
-            aqi_value, outside = get_aqi_at_location(
-                user_lat,
-                user_lon,
-                lat_grid,
-                lon_grid,
-                z_grid,
-                polygon
-            )
-
-            if np.isnan(aqi_value):
-                st.error("❌ Could not determine AQI for this location. Please try a different location.")
-                return
-
-            if outside:
-                st.warning("⚠️ Your location is outside Delhi boundary. Using nearest interpolated AQI value.")
-
-            # Get weather data
-            weather = fetch_weather_data()
-            if weather and "current" in weather:
-                weather_desc, _ = get_weather_info(weather["current"]["weather_code"])
-                temp = weather["current"]["temperature_2m"]
-            else:
-                weather_desc = "N/A"
-                temp = 0.0
-
-            # Build message
-            category, _, emoji, advice = get_aqi_category(aqi_value)
-
-            message = f"""📍 Delhi Air Quality Alert
-
-Location: {user_lat:.4f}, {user_lon:.4f}
-{emoji} AQI: {aqi_value:.0f} ({category})
-🌡️ Temperature: {temp:.1f}°C
-🌤️ Weather: {weather_desc}
-
-💡 Health Advice: {advice}
-
-Stay safe!
-"""
-            # Call Telegram function
-            if TELEGRAM_BOT_TOKEN == "8582253332:AAECTJHc6o9Q2OVWhi-FIGIDyagosLtDdJo": # Check if it's the placeholder
-                 st.warning("Using placeholder Bot Token. Please replace it in the code.")
-                 # You might still want to proceed for testing if the placeholder is valid
-            
-            with st.spinner("Sending Telegram Notification..."):
-                success, status_msg = send_telegram_notification(TELEGRAM_BOT_TOKEN, chat_id, message)
-                
-                if success:
-                    st.success(f"✅ {status_msg}")
-                else:
-                    st.error(f"❌ Failed: {status_msg}")
-                    
-        except Exception as e:
-            st.error(f"An unexpected error occurred: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
-
-
 def render_dummy_forecast_tab():
     """Render a dummy 24-hour AQI forecast using simulated data."""
     st.markdown('<div class="section-header">📈 24-Hour AQI Forecast (Sample)</div>',
@@ -1386,150 +1179,201 @@ def render_statistical_insights_tab(df):
     render_risk_frequency_histogram(historical_df)
 
 
-def render_health_advisor_tab(df):
-    """Individual health advisor tab with personalized recommendations"""
-    st.markdown('<div class="section-header">🧍 Personal Health Advisor</div>',
+# ==================================
+# NEW HEALTH ADVISOR TAB (REPLACES BOTH OLD ONES)
+# ==================================
+def render_health_advisor_v2(df):
+    """New unified health advisor with location-specific kriging and Telegram alerts"""
+    st.markdown('<div class="section-header">🏥 Personal Health Advisor</div>',
                 unsafe_allow_html=True)
     
-    st.info("💡 Get personalized air quality recommendations based on your health profile")
-
-    if df.empty:
-        st.warning("No AQI data available for analysis.")
-        return
-
-    df['dist'] = df.apply(
-        lambda r: ((r['lat']-DELHI_LAT)**2 + (r['lon']-DELHI_LON)**2)**0.5, axis=1
-    )
-    nearest = df.loc[df['dist'].idxmin()]
-    est_aqi = nearest['aqi']
-
-    st.metric("Estimated AQI at Your Location", int(est_aqi), 
-              delta=f"{get_aqi_category(est_aqi)[0]}")
-
-    st.markdown("#### 🏥 Your Health Profile")
-    conds = st.text_input(
-        "Enter your health conditions (comma-separated):",
-        placeholder="e.g., asthma, child, elderly, pregnant",
-        help="Be specific: asthma, COPD, heart disease, pregnant, child, elderly, etc."
-    )
-    cond_list = [c.strip() for c in conds.split(",") if c.strip()]
-    
-    if cond_list:
-        st.info(f"📋 Health conditions: {', '.join(cond_list)}")
-
-    if st.button("🤖 Get Personalized Advice", type="primary", use_container_width=True):
-        with st.spinner("Analyzing your situation..."):
-            rec = get_personalized_recommendation(est_aqi, cond_list)
-
-        st.markdown(
-            f"""<div class='health-card'>
-            <h3>{rec['aqi_category']} (AQI {rec['aqi_value']:.0f})</h3>
-            <p><strong>Risk Profile:</strong> {rec['risk_profile'].title()}</p>
-            <p>{rec['summary']}</p>
-            </div>""",
-            unsafe_allow_html=True
-        )
-
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            with st.expander("⚠️ Precautions", expanded=True):
-                for p in rec["precautions"]:
-                    st.write("• " + p)
-
-        with col2:
-            with st.expander("✅ Recommended Activities", expanded=True):
-                for a in rec["recommended_activities"]:
-                    st.write("• " + a)
-
-        with st.expander("🏥 Health Implications"):
-            st.write(rec.get("health_implications", "No specific health implications noted."))
-
-
-def render_family_advisor_tab(df):
-    """Family health advisor tab"""
-    st.markdown('<div class="section-header">👨‍👩‍👧 Family Health Advisor</div>',
-                unsafe_allow_html=True)
-    
-    st.info("💡 Get personalized recommendations for each family member")
+    st.info("💡 Add yourself or family members, specify a location for each, and get personalized AQI advice sent via Telegram.")
 
     if "family" not in st.session_state:
         st.session_state.family = []
-
-    st.markdown("#### 👥 Add Family Members")
-    
-    with st.form("add_family"):
-        col1, col2 = st.columns(2)
-        with col1:
-            name = st.text_input("Name:", placeholder="e.g., John")
-            age = st.number_input("Age:", 1, 120, 30)
-        with col2:
-            conds = st.text_input(
-                "Health conditions:", 
-                placeholder="e.g., asthma, child",
-                help="Enter relevant health conditions or age group"
-            )
         
-        submit = st.form_submit_button("➕ Add Family Member", use_container_width=True)
-        if submit and name:
-            st.session_state.family.append({
-                "name": name,
-                "age": age,
-                "conds": [c.strip() for c in conds.split(",") if c.strip()]
-            })
-            st.success(f"✅ Added {name} to family members")
-            st.rerun()
-
-    if st.session_state.family:
-        st.markdown("#### 👨‍👩‍👧‍👦 Current Family Members")
-        
-        for idx, m in enumerate(st.session_state.family):
-            col1, col2 = st.columns([4, 1])
+    # --- Part 1: Add Member Form ---
+    with st.expander("➕ Add New Member", expanded=True):
+        with st.form("add_family_member"):
+            st.markdown("#### 1. Member Details")
+            col1, col2 = st.columns(2)
             with col1:
-                conditions_text = ', '.join(m['conds']) if m['conds'] else 'No specific conditions'
-                st.write(f"**{m['name']}** • {m['age']} years • {conditions_text}")
+                name = st.text_input("Name:", placeholder="e.g., John or 'Me'")
+                age = st.number_input("Age:", 1, 120, 30)
             with col2:
-                if st.button("🗑️", key=f"remove_{idx}", help=f"Remove {m['name']}"):
+                conds = st.text_input(
+                    "Health conditions:", 
+                    placeholder="e.g., asthma, child, elderly",
+                    help="Enter relevant health conditions or age group (comma-separated)"
+                )
+
+            st.markdown("#### 2. Member Location")
+            
+            # Location selection logic (moved inside the form)
+            location_method = st.radio(
+                "Choose location method:",
+                ["🗺️ Select from Dropdown", "✍️ Enter Coordinates Manually"],
+                horizontal=True, key="loc_method"
+            )
+            
+            user_lat = None
+            user_lon = None
+
+            if location_method == "🗺️ Select from Dropdown":
+                popular_locations = {
+                    "Connaught Place": (28.6315, 77.2167),
+                    "India Gate": (28.6129, 77.2295),
+                    "Red Fort": (28.6562, 77.2410),
+                    "Qutub Minar": (28.5244, 77.1855),
+                    "Dwarka": (28.5921, 77.0460),
+                }
+                station_locations = {}
+                for _, row in df.iterrows():
+                    station_locations[f"📍 {row['station_name']} (AQI: {row['aqi']:.0f})"] = (row['lat'], row['lon'])
+                
+                all_locations = {**popular_locations, **station_locations}
+                
+                selected_location = st.selectbox(
+                    "Select Location:",
+                    options=list(all_locations.keys())
+                )
+                if selected_location:
+                    user_lat, user_lon = all_locations[selected_location]
+
+            elif location_method == "✍️ Enter Coordinates Manually":
+                loc_col1, loc_col2 = st.columns(2)
+                with loc_col1:
+                    user_lat = st.number_input("Latitude", format="%.6f", step=0.000001, value=28.6139)
+                with loc_col2:
+                    user_lon = st.number_input("Longitude", format="%.6f", step=0.000001, value=77.2090)
+
+            # Form submission
+            submit = st.form_submit_button("➕ Add Member", use_container_width=True)
+            if submit and name and user_lat is not None and user_lon is not None:
+                st.session_state.family.append({
+                    "name": name,
+                    "age": age,
+                    "conds": [c.strip() for c in conds.split(",") if c.strip()],
+                    "lat": user_lat,
+                    "lon": user_lon,
+                    "recommendation": None # Placeholder
+                })
+                st.success(f"✅ Added {name} at ({user_lat:.4f}, {user_lon:.4f})")
+                st.rerun()
+
+    st.markdown("---")
+
+    # --- Part 2: Display Members and Actions ---
+    st.markdown("#### 👥 Member List & Actions")
+    
+    if not st.session_state.family:
+        st.info("No members added yet. Use the form above to add yourself or a family member.")
+    
+    # Check for Kriging Data (needed for all members)
+    kriging_data = st.session_state.get("kriging_output", None)
+    if kriging_data is None:
+        if len(df) < 3:
+            st.error("Not enough AQI stations to generate health advice. Minimum 3 required.")
+            return
+        
+        with st.spinner("Generating spatial interpolation model (Kriging)..."):
+            try:
+                delhi_bounds_tuple = (28.40, 28.88, 76.84, 77.35)
+                polygon = st.session_state.get("delhi_polygon")
+                lon_grid, lat_grid, z_grid = perform_kriging_correct(
+                    df, delhi_bounds_tuple, polygon=polygon, resolution=200
+                )
+                st.session_state["kriging_output"] = (lon_grid, lat_grid, z_grid)
+                kriging_data = (lon_grid, lat_grid, z_grid)
+                st.success("✅ Spatial model generated.")
+            except Exception as e:
+                st.error(f"Error generating spatial model: {e}")
+                return
+    
+    lon_grid, lat_grid, z_grid = kriging_data
+    polygon = st.session_state.get("delhi_polygon")
+    
+    # Loop through each member and create their card
+    for idx, member in enumerate(st.session_state.family):
+        with st.container(border=True):
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                conditions_text = ', '.join(member['conds']) if member['conds'] else 'No specific conditions'
+                st.markdown(f"**{member['name']}** ({member['age']} yrs) | {conditions_text}")
+                st.caption(f"📍 Location: {member['lat']:.4f}, {member['lon']:.4f}")
+            
+            with col2:
+                # Action buttons
+                if st.button("🤖 Generate Advice", key=f"gen_{idx}", use_container_width=True):
+                    with st.spinner(f"Getting AQI at {member['name']}'s location..."):
+                        try:
+                            aqi_value, _ = get_aqi_at_location(
+                                member['lat'], member['lon'], lat_grid, lon_grid, z_grid, polygon
+                            )
+                            if np.isnan(aqi_value):
+                                st.error("Could not determine AQI for this location.")
+                            else:
+                                rec = get_personalized_recommendation(aqi_value, member['conds'])
+                                st.session_state.family[idx]['recommendation'] = rec
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Kriging Error: {e}")
+
+                if st.button("🗑️ Remove", key=f"rem_{idx}", use_container_width=True):
                     st.session_state.family.pop(idx)
                     st.rerun()
 
-        st.markdown("---")
-        
-        if st.button("🤖 Generate Family Recommendations", type="primary", use_container_width=True):
-            if df.empty:
-                st.warning("No AQI data available for analysis.")
-            else:
-                est_aqi = df['aqi'].mean()
+            # --- Part 3: Display Recommendation and Send ---
+            if member.get('recommendation'):
+                rec = member['recommendation']
+                st.markdown("---")
+                st.markdown(
+                    f"""<div class='health-card'>
+                    <h4>{rec['aqi_category']} (AQI {rec['aqi_value']:.0f})</h4>
+                    <p><strong>Risk Profile:</strong> {rec['risk_profile'].title()}</p>
+                    <p>{rec['summary']}</p>
+                    </div>""",
+                    unsafe_allow_html=True
+                )
                 
-                st.markdown(f"### 📊 Family Analysis for AQI {est_aqi:.0f}")
+                with st.expander("View Detailed Advice"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("**⚠️ Precautions**")
+                        for p in rec["precautions"]:
+                            st.write("• " + p)
+                    with col2:
+                        st.markdown("**✅ Recommended Activities**")
+                        for a in rec["recommended_activities"]:
+                            st.write("• " + a)
                 
-                with st.spinner("Analyzing recommendations for each family member..."):
-                    for m in st.session_state.family:
-                        rec = get_personalized_recommendation(est_aqi, m['conds'])
-                        
-                        st.markdown(
-                            f"""<div class='health-card'>
-                            <h4>{m['name']} ({m['age']} years)</h4>
-                            <p><b>Category:</b> {rec['aqi_category']} | <b>Risk Profile:</b> {rec['risk_profile'].title()}</p>
-                            <p>{rec['summary']}</p>
-                            <details>
-                            <summary style='cursor: pointer; color: #2196F3; font-weight: 600;'>View Details</summary>
-                            <div style='margin-top: 1rem;'>
-                            <p><b>Key Precautions:</b></p>
-                            <ul>{''.join([f'<li>{p}</li>' for p in rec['precautions'][:3]])}</ul>
-                            <p><b>Recommended Activities:</b></p>
-                            <ul>{''.join([f'<li>{a}</li>' for a in rec['recommended_activities'][:3]])}</ul>
-                            </div>
-                            </details>
-                            </div>""",
-                            unsafe_allow_html=True
-                        )
-        
-        if st.button("🗑️ Clear All Family Members"):
-            st.session_state.family = []
-            st.rerun()
-    else:
-        st.info("👥 No family members added yet. Use the form above to add family members.")
+                # Telegram Send Box
+                st.markdown("**Send to Telegram**")
+                chat_id = st.text_input("Telegram Chat ID:", placeholder="Get from @userinfobot", key=f"chat_{idx}")
+                if st.button("🚀 Send Notification", key=f"send_{idx}", use_container_width=True):
+                    if not chat_id:
+                        st.warning("Please enter a Telegram Chat ID.")
+                    else:
+                        # Format message
+                        precautions_list = "\n".join([f"• {p}" for p in rec['precautions']])
+                        message = f"""🏥 Personalized AQI Alert for {member['name']} 🏥
+
+Your location's AQI is: {rec['aqi_value']:.0f} ({rec['aqi_category']})
+
+{rec['summary']}
+
+---
+⚠️ Key Precautions:
+{precautions_list}
+
+Stay safe!
+"""
+                        with st.spinner("Sending to Telegram..."):
+                            success, status_msg = send_telegram_notification(TELEGRAM_BOT_TOKEN, chat_id, message)
+                            if success:
+                                st.success(f"✅ {status_msg}")
+                            else:
+                                st.error(f"❌ Failed: {status_msg}")
 
 
 # ==========================
@@ -1568,15 +1412,14 @@ else:
     render_header(aqi_data_to_display)
 
     # --- MODIFIED TABS ---
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "🗺️ Live Map", 
         "🔔 Alerts & Health",
         "📊 Analytics", 
         "📈 Statistical Insights",
-        "📱 Telegram Alerts",  # <-- Renamed from "SMS Alerts"
         "🔮 Forecast",
         "🔥 Kriging Heatmap",
-        "🏥 Health Advisor"
+        "🏥 Health Advisor" # <-- Tab 7 is now the new advisor
     ])
 
     with tab1:
@@ -1606,32 +1449,18 @@ else:
     with tab5:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            render_alert_subscription_tab(aqi_data_to_display) # <-- Calls the new Telegram function
+            render_dummy_forecast_tab()
             st.markdown('</div>', unsafe_allow_html=True)
             
     with tab6:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            render_dummy_forecast_tab()
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-    with tab7:
-        with st.container():
-            st.markdown('<div class="content-card">', unsafe_allow_html=True)
             render_kriging_tab(aqi_data_to_display)
             st.markdown('</div>', unsafe_allow_html=True)
     
-    with tab8:
+    with tab7:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            
-            # Create sub-tabs for Individual and Family advisors
-            subtab1, subtab2 = st.tabs(["🧍 Individual Advisor", "👨‍👩‍👧 Family Advisor"])
-            
-            with subtab1:
-                render_health_advisor_tab(aqi_data_to_display)
-            
-            with subtab2:
-                render_family_advisor_tab(aqi_data_to_display)
-            
+            # Call the new, unified function
+            render_health_advisor_v2(aqi_data_to_display) 
             st.markdown('</div>', unsafe_allow_html=True)
