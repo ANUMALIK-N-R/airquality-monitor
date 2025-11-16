@@ -512,7 +512,9 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     
-    html, body, [class*="st-"] {
+    /* --- THIS IS THE FIX --- */
+    /* We use .stApp instead of the overly-broad [class*="st-"] */
+    html, body, .stApp { 
         font-family: 'Inter', sans-serif;
     }
 
