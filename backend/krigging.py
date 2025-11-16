@@ -140,7 +140,7 @@ def perform_kriging_correct(df, bounds, polygon, resolution=220):
     try:
         OK = OrdinaryKriging(
             xs, ys, values,
-            variogram_model="linear",  # Changed from spherical to linear
+            variogram_model="spherical",  # Changed from spherical to linear
             verbose=False,
             enable_plotting=False,
             exact_values=True  # Force exact values at station locations
