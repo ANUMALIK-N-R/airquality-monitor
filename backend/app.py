@@ -16,6 +16,7 @@ import smtplib
 from email.message import EmailMessage
 import json
 from pathlib import Path
+import os # Added for Telegram config
 
 # ==========================
 # PAGE CONFIGURATION
@@ -42,47 +43,39 @@ HISTORICAL_DATA_DIR.mkdir(exist_ok=True)
 HISTORICAL_DATA_FILE = HISTORICAL_DATA_DIR / "aqi_history.json"
 
 # ==========================
-# EMAIL TO SMS CONFIGURATION
+# TELEGRAM CONFIGURATION (NEW)
 # ==========================
-SENDER_EMAIL = "anumaliknr@gmail.com"
-GMAIL_APP_PASSWORD = "xczo lasg vcek olqp"
+# 1. Get your Bot Token from @BotFather on Telegram
+# 2. It's best to set this as an environment variable for security
+#    Example: TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+#    For testing, you can hardcode it (but don't share it publicly!):
+TELEGRAM_BOT_TOKEN = "8582253332:AAECTJHc6o9Q2OVWhi-FIGIDyagosLtDdJo"  # <-- ❗️ REPLACE THIS
 
-SMS_GATEWAYS = {
-    "Airtel": "@airtelmail.com",
-    "Jio": "@jionet.com", 
-    "Vi (Vodafone Idea)": "@myvi.in",
-    "BSNL": "@bsnlmail.com",
-    "AT&T (USA)": "@txt.att.net",
-    "T-Mobile (USA)": "@tmomail.net",
-    "Verizon (USA)": "@vtext.com",
-    "Sprint (USA)": "@messaging.sprintpcs.com"
-}
-
-def send_sms_via_email(phone_number, carrier_gateway, message, subject="AQI Alert"):
-    """Send SMS using Email-to-SMS gateway via Gmail SMTP"""
+def send_telegram_notification(bot_token, chat_id, message):
+    """
+    Sends a plain text message to a specified Telegram user.
+    """
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message
+    }
     try:
-        phone_clean = ''.join(filter(str.isdigit, phone_number))
-        gateway_address = f"{phone_clean}{carrier_gateway}"
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        data = response.json()
         
-        msg = EmailMessage()
-        msg.set_content(message)
-        msg["From"] = SENDER_EMAIL
-        msg["To"] = gateway_address
-        msg["Subject"] = subject
-        
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login(SENDER_EMAIL, GMAIL_APP_PASSWORD)
-            server.send_message(msg)
-        
-        return True, f"SMS sent successfully to {phone_clean} via {carrier_gateway}"
-        
-    except smtplib.SMTPAuthenticationError:
-        return False, "Email authentication failed. Please check your Gmail credentials and ensure 'App Password' is enabled."
-    except smtplib.SMTPException as e:
-        return False, f"SMTP error: {str(e)}"
+        if data.get("ok"):
+            return True, "Telegram notification sent successfully."
+        else:
+            error_desc = data.get("description", "Unknown error")
+            return False, f"Telegram API error: {error_desc}"
+            
+    except requests.RequestException as e:
+        return False, f"Failed to send Telegram message: {str(e)}"
     except Exception as e:
-        return False, f"SMS sending failed: {str(e)}"
+        return False, f"An unexpected error occurred: {str(e)}"
+
 
 # ==========================
 # HISTORICAL DATA FUNCTIONS
@@ -442,7 +435,7 @@ def render_risk_frequency_histogram(historical_df):
     category_counts = daily_stats['category'].value_counts()
     
     category_order = ["Good", "Moderate", "Unhealthy for Sensitive Groups", 
-                     "Unhealthy", "Very Unhealthy", "Hazardous"]
+                      "Unhealthy", "Very Unhealthy", "Hazardous"]
     category_colors = {
         "Good": "#009E60",
         "Moderate": "#FFD600",
@@ -1061,17 +1054,21 @@ def render_alerts_tab(df):
 
 
 def render_alert_subscription_tab(df):
-    st.subheader("📩 Real-Time AQI Alerts (via SMS)")
+    # --- THIS IS THE NEW FUNCTION FROM FILE 2 ---
+    st.subheader("📩 Real-Time AQI Alerts (via Telegram)")
 
+    # Load polygon for Delhi from session state
     polygon = st.session_state.get("delhi_polygon", None)
     if polygon is None:
         st.error("Delhi boundary polygon not loaded.")
         return
 
+    # Load latest kriging data from session - AUTO-GENERATE IF NOT AVAILABLE
     kriging_data = st.session_state.get("kriging_output", None)
     if kriging_data is None:
         st.info("🔄 Generating kriging interpolation automatically...")
         
+        # Check if we have enough stations
         if len(df) < 3:
             st.error("Not enough AQI stations within Delhi boundary for interpolation (minimum 3 required).")
             return
@@ -1086,6 +1083,7 @@ def render_alert_subscription_tab(df):
                     polygon=polygon,
                     resolution=200
                 )
+                # Save to session state
                 st.session_state["kriging_output"] = (lon_grid, lat_grid, z_grid)
                 st.success("✅ Kriging data generated successfully!")
                 kriging_data = (lon_grid, lat_grid, z_grid)
@@ -1097,6 +1095,7 @@ def render_alert_subscription_tab(df):
 
     st.markdown("### 📍 Select Your Location")
     
+    # Location method selection
     location_method = st.radio(
         "Choose how to provide your location:",
         ["🗺️ Select from Map/Dropdown", "✍️ Enter Coordinates Manually", "📡 Use Device GPS"],
@@ -1109,6 +1108,7 @@ def render_alert_subscription_tab(df):
     if location_method == "🗺️ Select from Map/Dropdown":
         st.info("💡 Select a popular location in Delhi or choose from monitoring stations")
         
+        # Popular Delhi locations
         popular_locations = {
             "Connaught Place": (28.6315, 77.2167),
             "India Gate": (28.6129, 77.2295),
@@ -1122,6 +1122,7 @@ def render_alert_subscription_tab(df):
             "Nehru Place": (28.5494, 77.2501)
         }
         
+        # Add monitoring stations to dropdown
         station_locations = {}
         for _, row in df.iterrows():
             station_locations[f"📍 {row['station_name']} (AQI: {row['aqi']:.0f})"] = (row['lat'], row['lon'])
@@ -1144,7 +1145,7 @@ def render_alert_subscription_tab(df):
         with col2:
             user_lon = st.number_input("Longitude", format="%.6f", step=0.000001, value=77.2090)
             
-    else:
+    else:  # Device GPS
         st.info("📡 Click the button below to request your device location")
         
         if st.button("📍 Get My Location", key="gps_button"):
@@ -1155,8 +1156,12 @@ def render_alert_subscription_tab(df):
                         function(position) {
                             const lat = position.coords.latitude;
                             const lon = position.coords.longitude;
+                            
+                            // Store in session storage
                             sessionStorage.setItem('user_lat', lat);
                             sessionStorage.setItem('user_lon', lon);
+                            
+                            // Reload page to update
                             window.location.reload();
                         },
                         function(error) {
@@ -1169,6 +1174,7 @@ def render_alert_subscription_tab(df):
                 </script>
             """, unsafe_allow_html=True)
         
+        # Try to read from query params (after reload)
         query_params = st.experimental_get_query_params()
         if 'lat' in query_params and 'lon' in query_params:
             try:
@@ -1179,33 +1185,26 @@ def render_alert_subscription_tab(df):
                 st.warning("⚠️ Could not parse GPS coordinates")
 
     st.markdown("---")
-    st.markdown("### 📱 SMS Alert Configuration")
     
-    col1, col2 = st.columns(2)
+    st.markdown("### 📱 Telegram Alert Configuration")
     
-    with col1:
-        phone_number = st.text_input(
-            "Phone Number (with country code)", 
-            placeholder="+919876543210 or 919876543210",
-            help="Enter phone number with country code (e.g., +91 for India). The + sign is optional."
-        )
-        
-    with col2:
-        carrier_name = st.selectbox(
-            "Select Carrier (for Gateway)",
-            options=list(SMS_GATEWAYS.keys()),
-            help="Select your mobile carrier to route the SMS correctly."
-        )
+    chat_id = st.text_input(
+        "Your Telegram Chat ID", 
+        placeholder="123456789",
+        help="How to find your Chat ID: Open Telegram, search for the bot @userinfobot, start it, and copy the ID it gives you."
+    )
+    st.caption("ℹ️ To get your Chat ID, message `@userinfobot` on Telegram and copy the number it sends you.")
 
-    if st.button("🚀 Get AQI Alert via SMS", type="primary", use_container_width=True):
-        if not phone_number:
-            st.warning("⚠️ Please enter a phone number!")
+    if st.button("🚀 Get AQI Alert via Telegram", type="primary", use_container_width=True):
+        if not chat_id:
+            st.warning("⚠️ Please enter your Telegram Chat ID!")
             return
 
         if user_lat is None or user_lon is None:
             st.warning("⚠️ Please provide your location!")
             return
 
+        # Get AQI using kriging function
         try:
             aqi_value, outside = get_aqi_at_location(
                 user_lat,
@@ -1223,6 +1222,7 @@ def render_alert_subscription_tab(df):
             if outside:
                 st.warning("⚠️ Your location is outside Delhi boundary. Using nearest interpolated AQI value.")
 
+            # Get weather data
             weather = fetch_weather_data()
             if weather and "current" in weather:
                 weather_desc, _ = get_weather_info(weather["current"]["weather_code"])
@@ -1231,6 +1231,7 @@ def render_alert_subscription_tab(df):
                 weather_desc = "N/A"
                 temp = 0.0
 
+            # Build message
             category, _, emoji, advice = get_aqi_category(aqi_value)
 
             message = f"""📍 Delhi Air Quality Alert
@@ -1244,14 +1245,16 @@ Location: {user_lat:.4f}, {user_lon:.4f}
 
 Stay safe!
 """
-            gateway = SMS_GATEWAYS[carrier_name]
+            # Call Telegram function
+            if TELEGRAM_BOT_TOKEN == "8582253332:AAECTJHc6o9Q2OVWhi-FIGIDyagosLtDdJo": # Check if it's the placeholder
+                 st.warning("Using placeholder Bot Token. Please replace it in the code.")
+                 # You might still want to proceed for testing if the placeholder is valid
             
-            with st.spinner("Sending SMS via Email Gateway..."):
-                success, status_msg = send_sms_via_email(phone_number, gateway, message)
+            with st.spinner("Sending Telegram Notification..."):
+                success, status_msg = send_telegram_notification(TELEGRAM_BOT_TOKEN, chat_id, message)
                 
                 if success:
                     st.success(f"✅ {status_msg}")
-                    st.info("ℹ️ Note: SMS delivery depends on carrier gateway policies. It may appear as an email or text.")
                 else:
                     st.error(f"❌ Failed: {status_msg}")
                     
@@ -1401,7 +1404,7 @@ def render_health_advisor_tab(df):
     est_aqi = nearest['aqi']
 
     st.metric("Estimated AQI at Your Location", int(est_aqi), 
-             delta=f"{get_aqi_category(est_aqi)[0]}")
+              delta=f"{get_aqi_category(est_aqi)[0]}")
 
     st.markdown("#### 🏥 Your Health Profile")
     conds = st.text_input(
@@ -1564,12 +1567,13 @@ else:
 
     render_header(aqi_data_to_display)
 
+    # --- MODIFIED TABS ---
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "🗺️ Live Map", 
         "🔔 Alerts & Health",
         "📊 Analytics", 
         "📈 Statistical Insights",
-        "📱 SMS Alerts",
+        "📱 Telegram Alerts",  # <-- Renamed from "SMS Alerts"
         "🔮 Forecast",
         "🔥 Kriging Heatmap",
         "🏥 Health Advisor"
@@ -1602,7 +1606,7 @@ else:
     with tab5:
         with st.container():
             st.markdown('<div class="content-card">', unsafe_allow_html=True)
-            render_alert_subscription_tab(aqi_data_to_display)
+            render_alert_subscription_tab(aqi_data_to_display) # <-- Calls the new Telegram function
             st.markdown('</div>', unsafe_allow_html=True)
             
     with tab6:
