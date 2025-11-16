@@ -98,7 +98,7 @@ st.markdown("""
 
     /* Main background - Sky Blue Theme */
     .stApp {
-        background: #ACD696;
+        background: #00CEC8;
     }
 
     /* Hide Streamlit's default header and footer */
