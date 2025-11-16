@@ -781,24 +781,30 @@ def render_header(df):
         </div>
         """, unsafe_allow_html=True)
     
-    last_update_time = df['last_updated'].max(
-    ) if not df.empty and 'last_updated' in df.columns else "N/A"
-    st.markdown(
-        f'<p class="subtitle">Real-time monitoring • Last updated: {last_update_time}</p>', unsafe_allow_html=True)
+    last_update_time = df['last_updated'].max() if not df.empty and 'last_updated' in df.columns else "N/A"
+    st.markdown(f'<p class="subtitle">Real-time monitoring • Last updated: {last_update_time}</p>', 
+                unsafe_allow_html=True)
 
     c1, c2, c3, c4 = st.columns(4)
     if not df.empty:
         with c1:
+            avg_aqi = df["aqi"].mean()
+            avg_cat = get_aqi_category(avg_aqi)[0]
             st.markdown(
-                f'<div class="metric-card"><div class="metric-card-label">Average AQI</div><div class="metric-card-value">{df["aqi"].mean():.1f}</div><div class="metric-card-delta">{get_aqi_category(df["aqi"].mean())[0]}</div></div>', unsafe_allow_html=True)
+                f'<div class="metric-card"><div class="metric-card-label">Average AQI</div><div class="metric-card-value">{avg_aqi:.1f}</div><div class="metric-card-delta">{avg_cat}</div></div>', 
+                unsafe_allow_html=True)
         with c2:
             min_station = df.loc[df["aqi"].idxmin()]["station_name"]
+            min_aqi = df["aqi"].min()
             st.markdown(
-                f'<div class="metric-card"><div class="metric-card-label">Minimum AQI</div><div class="metric-card-value">{df["aqi"].min():.0f}</div><div class="metric-card-delta">{min_station}</div></div>', unsafe_allow_html=True)
+                f'<div class="metric-card"><div class="metric-card-label">Minimum AQI</div><div class="metric-card-value">{min_aqi:.0f}</div><div class="metric-card-delta">{min_station}</div></div>', 
+                unsafe_allow_html=True)
         with c3:
             max_station = df.loc[df["aqi"].idxmax()]["station_name"]
+            max_aqi = df["aqi"].max()
             st.markdown(
-                f'<div class="metric-card"><div class="metric-card-label">Maximum AQI</div><div class="metric-card-value">{df["aqi"].max():.0f}</div><div class="metric-card-delta">{max_station}</div></div>', unsafe_allow_html=True)
+                f'<div class="metric-card"><div class="metric-card-label">Maximum AQI</div><div class="metric-card-value">{max_aqi:.0f}</div><div class="metric-card-delta">{max_station}</div></div>', 
+                unsafe_allow_html=True)
 
     with c4:
         weather_data = fetch_weather_data()
