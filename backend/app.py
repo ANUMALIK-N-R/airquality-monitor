@@ -841,8 +841,7 @@ def render_kriging_tab(df):
             })
             
             heatmap_df = heatmap_df.dropna(subset=['aqi'])
-
-           fig = px.scatter_mapbox(
+            fig = px.scatter_mapbox(
                 heatmap_df,
                 lat="lat",
                 lon="lon",
