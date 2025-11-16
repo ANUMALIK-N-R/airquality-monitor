@@ -1182,6 +1182,9 @@ def render_statistical_insights_tab(df):
 # ==================================
 # NEW HEALTH ADVISOR TAB (REPLACES BOTH OLD ONES)
 # ==================================
+# ==================================
+# NEW HEALTH ADVISOR TAB (REPLACES BOTH OLD ONES)
+# ==================================
 def render_health_advisor_v2(df):
     """New unified health advisor with location-specific kriging and Telegram alerts"""
     st.markdown('<div class="section-header">🏥 Personal Health Advisor</div>',
@@ -1193,7 +1196,9 @@ def render_health_advisor_v2(df):
         st.session_state.family = []
         
     # --- Part 1: Add Member Form ---
-    with st.expander("➕ Add New Member", expanded=True):
+    
+    # THIS IS THE FIX: Changed expanded=True to expanded=False
+    with st.expander("➕ Add New Member", expanded=False):
         with st.form("add_family_member"):
             st.markdown("#### 1. Member Details")
             col1, col2 = st.columns(2)
@@ -1374,8 +1379,6 @@ Stay safe!
                                 st.success(f"✅ {status_msg}")
                             else:
                                 st.error(f"❌ Failed: {status_msg}")
-
-
 # ==========================
 # MAIN APP EXECUTION
 # ==========================
